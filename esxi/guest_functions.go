@@ -68,11 +68,11 @@ func getBootDiskPath(c *Config, vmid string) (string, error) {
 	return r.Replace(stdout), err
 }
 
-func getDst_vmx_file(c *Config, vmid string) (string, error) {
+func getDst_vmx_file(c *Config, vmid string) (string, string, error) {
 	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getDst_vmx_file]\n")
 
-	var dst_vmx_ds, dst_vmx, dst_vmx_file string
+	var dst_vmx_ds, dst_vmx, dst_vmx_file_path string
 
 	//      -Get location of vmx file on esxi host
 	remote_cmd := fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
@@ -85,8 +85,8 @@ func getDst_vmx_file(c *Config, vmid string) (string, error) {
 	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get dst_vmx")
 	dst_vmx = stdout
 
-	dst_vmx_file = "/vmfs/volumes/" + dst_vmx_ds + "/" + dst_vmx
-	return dst_vmx_file, err
+	dst_vmx_file_path = "/vmfs/volumes/" + dst_vmx_ds + "/" + dst_vmx
+	return dst_vmx_file_path, dst_vmx, err
 }
 
 func readVmx_contents(c *Config, vmid string) (string, error) {
@@ -95,7 +95,7 @@ func readVmx_contents(c *Config, vmid string) (string, error) {
 
 	var remote_cmd, vmx_contents string
 
-	dst_vmx_file, err := getDst_vmx_file(c, vmid)
+	dst_vmx_file, _, err := getDst_vmx_file(c, vmid)
 	remote_cmd = fmt.Sprintf("cat \"%s\"", dst_vmx_file)
 	vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "read guest_name.vmx file")
 
@@ -313,12 +313,28 @@ func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numv
 	vmx_contents = strings.Replace(vmx_contents, "\"", "\\\"", -1)
 	log.Printf("[updateVmx_contents] New guest_name.vmx: %s\n", vmx_contents)
 
-	dst_vmx_file, err := getDst_vmx_file(c, vmid)
-	remote_cmd = fmt.Sprintf("echo \"%s\" | tee %s", vmx_contents, dst_vmx_file)
-	vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "write guest_name.vmx file")
+	dst_vmx_file_path, dst_vmx_file, err := getDst_vmx_file(c, vmid)
 
 	if err != nil {
-		log.Printf("[updateVmx_contents] Failed to update VMX file on host: %s\n", err)
+		log.Printf("[updateVmx_contents] Failed to get VMX file name from ESXi: %s\n", err)
+		return err
+	}
+
+	err = writeStringToFile(dst_vmx_file, vmx_contents)
+
+	if err != nil {
+		return err
+	}
+
+	err = copyFileViaScp(esxiSSHinfo, dst_vmx_file, dst_vmx_file_path)
+
+	if err != nil {
+		return err
+	}
+
+	err = deleteFile(dst_vmx_file)
+
+	if err != nil {
 		return err
 	}
 
@@ -354,7 +370,7 @@ func cleanStorageFromVmx(c *Config, vmid string) error {
 	//
 	vmx_contents = strings.Replace(vmx_contents, "\"", "\\\"", -1)
 
-	dst_vmx_file, err := getDst_vmx_file(c, vmid)
+	dst_vmx_file, _, err := getDst_vmx_file(c, vmid)
 
 	remote_cmd = fmt.Sprintf("echo \"%s\" | grep '[^[:blank:]]' >%s", vmx_contents, dst_vmx_file)
 	vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "write guest_name.vmx file")
