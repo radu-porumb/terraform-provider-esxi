@@ -3,23 +3,32 @@ package esxi
 import (
 	"errors"
 	"fmt"
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/helper/validation"
 	"log"
 	"net/url"
 	"strconv"
+
+	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/helper/validation"
 )
 
-func resourceGUEST() *schema.Resource {
+// BuildGuestResourceSchema builds the guest resource schema
+func BuildGuestResourceSchema() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceGUESTCreate,
-		Read:   resourceGUESTRead,
-		Update: resourceGUESTUpdate,
-		Delete: resourceGUESTDelete,
+		Create: CreateGuestResource,
+		Read:   ReadGuestDataIntoResource,
+		Update: UpdateGuestResource,
+		Delete: DeleteGuestResource,
 		Importer: &schema.ResourceImporter{
-			State: resourceGUESTImport,
+			State: ImportGuestResource,
 		},
 		Schema: map[string]*schema.Schema{
+			"count": &schema.Schema{
+				Type:        schema.TypeInt,
+				Optional:    true,
+				ForceNew:    true,
+				Default:     1,
+				Description: "Number of VM instances to create.",
+			},
 			"clone_from_vm": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -122,6 +131,12 @@ func resourceGUEST() *schema.Resource {
 							ForceNew: false,
 							Computed: true,
 						},
+						"pci_slot_number": &schema.Schema{
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: false,
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -194,30 +209,31 @@ func resourceGUEST() *schema.Resource {
 	}
 }
 
-func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
+// CreateGuestResource creates the guest resource
+func CreateGuestResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 
 	log.Printf("[resourceGUESTCreate]\n")
 
-	var virtual_networks [10][3]string
-	var virtual_disks [60][2]string
-	var src_path string
+	var virtualNetworks [10][3]string
+	var virtualDisks [60][2]string
+	var srcPath string
 	var tmpint, i, virtualDiskCount int
 
-	clone_from_vm := d.Get("clone_from_vm").(string)
-	ovf_source := d.Get("ovf_source").(string)
-	disk_store := d.Get("disk_store").(string)
-	resource_pool_name := d.Get("resource_pool_name").(string)
-	guest_name := d.Get("guest_name").(string)
-	boot_disk_type := d.Get("boot_disk_type").(string)
-	boot_disk_size := d.Get("boot_disk_size").(string)
+	cloneFromVM := d.Get("clone_from_vm").(string)
+	ovfSource := d.Get("ovf_source").(string)
+	diskStore := d.Get("disk_store").(string)
+	resourcePoolName := d.Get("resource_pool_name").(string)
+	guestName := d.Get("guest_name").(string)
+	bootDiskType := d.Get("boot_disk_type").(string)
+	bootDiskSize := d.Get("boot_disk_size").(string)
 	memsize := d.Get("memsize").(string)
 	numvcpus := d.Get("numvcpus").(string)
 	virthwver := d.Get("virthwver").(string)
 	guestos := d.Get("guestos").(string)
 	notes := d.Get("notes").(string)
 	power := d.Get("power").(string)
-	guest_shutdown_timeout := d.Get("guest_shutdown_timeout").(int)
+	guestShutdownTimeout := d.Get("guest_shutdown_timeout").(int)
 
 	guestinfo, ok := d.Get("guestinfo").(map[string]interface{})
 	if !ok {
@@ -225,17 +241,17 @@ func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
 	}
 
 	// Validations
-	if resource_pool_name == "ha-root-pool" {
-		resource_pool_name = "/"
+	if resourcePoolName == "ha-root-pool" {
+		resourcePoolName = "/"
 	}
 
-	if clone_from_vm != "" {
+	if cloneFromVM != "" {
 		password := url.QueryEscape(c.esxiPassword)
-		src_path = fmt.Sprintf("vi://%s:%s@%s/%s", c.esxiUserName, password, c.esxiHostName, clone_from_vm)
-	} else if ovf_source != "" {
-		src_path = ovf_source
+		srcPath = fmt.Sprintf("vi://%s:%s@%s/%s", c.esxiUserName, password, c.esxiHostName, cloneFromVM)
+	} else if ovfSource != "" {
+		srcPath = ovfSource
 	} else {
-		src_path = "none"
+		srcPath = "none"
 	}
 
 	//  Validate number of virthwver.
@@ -253,19 +269,19 @@ func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
 	}
 
 	// Validate boot_disk_type
-	if boot_disk_type == "" {
-		boot_disk_type = "thin"
+	if bootDiskType == "" {
+		bootDiskType = "thin"
 	}
-	if boot_disk_type != "thin" && boot_disk_type != "zeroedthick" && boot_disk_type != "eagerzeroedthick" {
+	if bootDiskType != "thin" && bootDiskType != "zeroedthick" && bootDiskType != "eagerzeroedthick" {
 		return errors.New("Error: boot_disk_type must be thin, zeroedthick or eagerzeroedthick")
 	}
 
 	//  Validate boot_disk_size.
-	if _, err := strconv.Atoi(boot_disk_size); err != nil && boot_disk_size != "" {
+	if _, err := strconv.Atoi(bootDiskSize); err != nil && bootDiskSize != "" {
 		return errors.New("Error: boot_disk_size must be an integer")
 	}
-	tmpint, _ = strconv.Atoi(boot_disk_size)
-	if (tmpint < 1 || tmpint > 62000) && boot_disk_size != "" {
+	tmpint, _ = strconv.Atoi(bootDiskSize)
+	if (tmpint < 1 || tmpint > 62000) && bootDiskSize != "" {
 		return errors.New("Error: boot_disk_size must be an > 1 and < 62000")
 	}
 
@@ -278,18 +294,18 @@ func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
 		prefix := fmt.Sprintf("network_interfaces.%d.", i)
 
 		if attr, ok := d.Get(prefix + "virtual_network").(string); ok && attr != "" {
-			virtual_networks[i][0] = d.Get(prefix + "virtual_network").(string)
+			virtualNetworks[i][0] = d.Get(prefix + "virtual_network").(string)
 		}
 
 		if attr, ok := d.Get(prefix + "mac_address").(string); ok && attr != "" {
-			virtual_networks[i][1] = d.Get(prefix + "mac_address").(string)
+			virtualNetworks[i][1] = d.Get(prefix + "mac_address").(string)
 		}
 
 		if attr, ok := d.Get(prefix + "nic_type").(string); ok && attr != "" {
-			virtual_networks[i][2] = d.Get(prefix + "nic_type").(string)
+			virtualNetworks[i][2] = d.Get(prefix + "nic_type").(string)
 			//  Validate nictype
-			if validateNICType(virtual_networks[i][2]) == false {
-				errMSG := fmt.Sprintf("Error: invalid nic_type. %s\nMust be vlance flexible e1000 e1000e vmxnet vmxnet2 or vmxnet3", virtual_networks[i][2])
+			if validateNICType(virtualNetworks[i][2]) == false {
+				errMSG := fmt.Sprintf("Error: invalid nic_type. %s\nMust be vlance flexible e1000 e1000e vmxnet vmxnet2 or vmxnet3", virtualNetworks[i][2])
 				return errors.New(errMSG)
 			}
 		}
@@ -299,7 +315,7 @@ func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
 	virtualDiskCount, ok = d.Get("virtual_disks.#").(int)
 	if !ok {
 		virtualDiskCount = 0
-		virtual_disks[0][0] = ""
+		virtualDisks[0][0] = ""
 	}
 
 	if virtualDiskCount > 59 {
@@ -309,22 +325,22 @@ func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
 		prefix := fmt.Sprintf("virtual_disks.%d.", i)
 
 		if attr, ok := d.Get(prefix + "virtual_disk_id").(string); ok && attr != "" {
-			virtual_disks[i][0] = d.Get(prefix + "virtual_disk_id").(string)
+			virtualDisks[i][0] = d.Get(prefix + "virtual_disk_id").(string)
 		}
 
 		if attr, ok := d.Get(prefix + "slot").(string); ok && attr != "" {
-			virtual_disks[i][1] = d.Get(prefix + "slot").(string)
-			validateVirtualDiskSlot(virtual_disks[i][1])
-			result := validateVirtualDiskSlot(virtual_disks[i][1])
+			virtualDisks[i][1] = d.Get(prefix + "slot").(string)
+			validateVirtualDiskSlot(virtualDisks[i][1])
+			result := validateVirtualDiskSlot(virtualDisks[i][1])
 			if result != "ok" {
 				return errors.New(result)
 			}
 		}
 	}
 
-	vmid, err := guestCREATE(c, guest_name, disk_store, src_path, resource_pool_name, memsize,
-		numvcpus, virthwver, guestos, boot_disk_type, boot_disk_size, virtual_networks,
-		virtual_disks, guest_shutdown_timeout, notes, guestinfo)
+	vmid, err := CreateGuest(c, guestName, diskStore, srcPath, resourcePoolName, memsize,
+		numvcpus, virthwver, guestos, bootDiskType, bootDiskSize, virtualNetworks,
+		virtualDisks, guestShutdownTimeout, notes, guestinfo)
 	if err != nil {
 		tmpint, _ = strconv.Atoi(vmid)
 		if tmpint > 0 {
@@ -337,13 +353,13 @@ func resourceGUESTCreate(d *schema.ResourceData, m interface{}) error {
 	d.SetId(vmid)
 
 	if power == "on" {
-		_, err = guestPowerOn(c, vmid)
+		_, err = PowerOnGuest(c, vmid)
 		if err != nil {
-			return errors.New("Failed to power on.")
+			return errors.New("Failed to power on")
 		}
 	}
 	d.Set("power", "on")
 
 	// Refresh
-	return resourceGUESTRead(d, m)
+	return ReadGuestDataIntoResource(d, m)
 }

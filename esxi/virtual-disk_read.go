@@ -1,26 +1,28 @@
 package esxi
 
 import (
-	"github.com/hashicorp/terraform/helper/schema"
 	"log"
+
+	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceVIRTUALDISKRead(d *schema.ResourceData, m interface{}) error {
+// ReadVirtualDiskDataIntoResource reads virtual disk data from ESXi host into resource
+func ReadVirtualDiskDataIntoResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	log.Println("[resourceVIRTUALDISKRead]")
 
-	virtual_disk_disk_store, virtual_disk_dir, virtual_disk_name, virtual_disk_size, virtual_disk_type, err := virtualDiskREAD(c, d.Id())
+	virtualDiskDiskStore, virtualDiskDir, virtualDiskName, virtualDiskSize, virtualDiskType, err := ReadVirtualDiskInfo(c, d.Id())
 	if err != nil {
 		d.SetId("")
 		return nil
 	}
 
-	d.Set("virtual_disk_disk_store", virtual_disk_disk_store)
-	d.Set("virtual_disk_dir", virtual_disk_dir)
-	d.Set("virtual_disk_name", virtual_disk_name)
-	d.Set("virtual_disk_size", virtual_disk_size)
-	if virtual_disk_type != "Unknown" {
-		d.Set("virtual_disk_type", virtual_disk_type)
+	d.Set("virtual_disk_disk_store", virtualDiskDiskStore)
+	d.Set("virtual_disk_dir", virtualDiskDir)
+	d.Set("virtual_disk_name", virtualDiskName)
+	d.Set("virtual_disk_size", virtualDiskSize)
+	if virtualDiskType != "Unknown" {
+		d.Set("virtual_disk_type", virtualDiskType)
 	}
 
 	return nil

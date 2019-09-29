@@ -10,9 +10,8 @@ import (
 	"strings"
 )
 
-// ParseVMX parses the keys and values from a VMX file and returns
-// them as a Go map.
-func ParseVMX(contents string) map[string]string {
+// ParseVmxFile parses VMX file to map
+func ParseVmxFile(contents string) map[string]string {
 	results := make(map[string]string)
 
 	lineRe := regexp.MustCompile(`^(.+?)\s*=\s*"(.*?)"\s*$`)
@@ -29,13 +28,13 @@ func ParseVMX(contents string) map[string]string {
 	return results
 }
 
-// EncodeVMX takes a map and turns it into valid VMX contents.
-func EncodeVMX(contents map[string]string) string {
+// BuildVmxString builds a valid VMX file from a data map
+func BuildVmxString(contents map[string]string) string {
 	var buf bytes.Buffer
 
 	i := 0
 	keys := make([]string, len(contents))
-	for k, _ := range contents {
+	for k := range contents {
 		keys[i] = k
 		i++
 	}
@@ -48,9 +47,8 @@ func EncodeVMX(contents map[string]string) string {
 	return buf.String()
 }
 
-// WriteVMX takes a path to a VMX file and contents in the form of a
-// map and writes it out.
-func WriteVMX(path string, data map[string]string) (err error) {
+// SaveVmxDataToDisk saves a map of VMX contents to disk
+func SaveVmxDataToDisk(path string, data map[string]string) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return
@@ -58,10 +56,45 @@ func WriteVMX(path string, data map[string]string) (err error) {
 	defer f.Close()
 
 	var buf bytes.Buffer
-	buf.WriteString(EncodeVMX(data))
+	buf.WriteString(BuildVmxString(data))
 	if _, err = io.Copy(f, &buf); err != nil {
 		return
 	}
 
 	return
+}
+
+// SaveVmxStringToDisk saves VMX contents string to disk
+func SaveVmxStringToDisk(fileName string, data string) (err error) {
+
+	file, err := os.Create(fileName)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	_, err = io.WriteString(file, data)
+
+	if err != nil {
+		return
+	}
+	return file.Sync()
+}
+
+// DeleteVmx deletes VMX file from local disk
+func DeleteVmx(fileName string) (err error) {
+	err = os.Remove(fileName)
+
+	return
+}
+
+// GetVmxFileFromPath gets the VMX file name from a path string
+func GetVmxFileFromPath(path string) string {
+	if !strings.Contains(path, "/") {
+		return path
+	}
+
+	pathFragments := strings.Split(path, "/")
+
+	return pathFragments[len(pathFragments)-1]
 }

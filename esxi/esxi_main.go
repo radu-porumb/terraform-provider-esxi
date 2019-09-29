@@ -1,6 +1,7 @@
 package esxi
 
-type SshConnectionStruct struct {
+// SSHConnectionSettings contains SSH connection settings
+type SSHConnectionSettings struct {
 	host string
 	port string
 	user string

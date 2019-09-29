@@ -5,6 +5,7 @@ import (
 	"log"
 )
 
+// Config struct contains configuration data for the ESXi host
 type Config struct {
 	esxiHostName string
 	esxiHostPort string
@@ -12,17 +13,18 @@ type Config struct {
 	esxiPassword string
 }
 
-func (c *Config) validateEsxiCreds() error {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// ValidateEsxiCredentials tests the ESXi credentials by attempting to connect to ESXi host
+func (c *Config) ValidateEsxiCredentials() error {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[validateEsxiCreds]\n")
 
-	var remote_cmd string
+	var remoteCmd string
 	var err error
 
-	remote_cmd = fmt.Sprintf("vmware --version")
-	_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Connectivity test, get vmware version")
+	remoteCmd = fmt.Sprintf("vmware --version")
+	_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "Connectivity test, get vmware version")
 	if err != nil {
-		return fmt.Errorf("Failed to connect to esxi host: %s\n", err)
+		return fmt.Errorf("Failed to connect to esxi host: %s", err)
 	}
 	return nil
 }

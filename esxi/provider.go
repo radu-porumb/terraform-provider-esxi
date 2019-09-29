@@ -2,10 +2,11 @@ package esxi
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
 	"log"
 	"os"
+
+	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/terraform"
 )
 
 func init() {
@@ -14,6 +15,7 @@ func init() {
 	log.SetPrefix(fmt.Sprintf("pid-%d-", os.Getpid()))
 }
 
+// Provider returns the provider schema
 func Provider() terraform.ResourceProvider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{
@@ -44,15 +46,16 @@ func Provider() terraform.ResourceProvider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"esxi_guest":         resourceGUEST(),
-			"esxi_resource_pool": resourceRESOURCEPOOL(),
-			"esxi_virtual_disk":  resourceVIRTUALDISK(),
+			"esxi_guest":         BuildGuestResourceSchema(),
+			"esxi_resource_pool": BuildResourcePoolResourceSchema(),
+			"esxi_virtual_disk":  BuildVirtualDiskResourceSchema(),
 		},
-		ConfigureFunc: configureProvider,
+		ConfigureFunc: ConfigureProvider,
 	}
 }
 
-func configureProvider(d *schema.ResourceData) (interface{}, error) {
+// ConfigureProvider builds the configuration map from provider data
+func ConfigureProvider(d *schema.ResourceData) (interface{}, error) {
 	config := Config{
 		esxiHostName: d.Get("esxi_hostname").(string),
 		esxiHostPort: d.Get("esxi_hostport").(string),
@@ -60,7 +63,7 @@ func configureProvider(d *schema.ResourceData) (interface{}, error) {
 		esxiPassword: d.Get("esxi_password").(string),
 	}
 
-	if err := config.validateEsxiCreds(); err != nil {
+	if err := config.ValidateEsxiCredentials(); err != nil {
 		return nil, err
 	}
 

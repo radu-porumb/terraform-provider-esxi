@@ -9,56 +9,59 @@ import (
 	"time"
 )
 
-func guestGetVMID(c *Config, guest_name string) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// GetGuestVMID gets the guest VM's ID by the name
+func GetGuestVMID(c *Config, guestName string) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestGetVMID]\n")
 
-	var remote_cmd, vmid string
+	var remoteCmd, vmid string
 	var err error
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/getallvms 2>/dev/null | sort -n | "+
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/getallvms 2>/dev/null | sort -n | "+
 		"grep \"[0-9] * %s .*%s\" | awk '{print $1}' | "+
-		"tail -1", guest_name, guest_name)
+		"tail -1", guestName, guestName)
 
-	vmid, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get vmid")
+	vmid, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get vmid")
 	log.Printf("[guestGetVMID] result: %s\n", vmid)
 	if err != nil {
 		log.Printf("[guestGetVMID] Failed get vmid: %s\n", err)
-		return "", fmt.Errorf("Failed get vmid: %s\n", err)
+		return "", fmt.Errorf("Failed get vmid: %s", err)
 	}
 
 	return vmid, nil
 }
 
-func guestValidateVMID(c *Config, vmid string) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// ValidateGuestVMID validates a guest VM's ID
+func ValidateGuestVMID(c *Config, vmid string) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestValidateVMID]\n")
 
-	var remote_cmd string
+	var remoteCmd string
 	var err error
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/getallvms 2>/dev/null | awk '{print $1}' | "+
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/getallvms 2>/dev/null | awk '{print $1}' | "+
 		"grep '^%s$'", vmid)
 
-	vmid, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "validate vmid exists")
+	vmid, err = RunHostCommand(esxiSSHinfo, remoteCmd, "validate vmid exists")
 	log.Printf("[guestValidateVMID] result: %s\n", vmid)
 	if err != nil {
 		log.Printf("[guestValidateVMID] Failed get vmid: %s\n", err)
-		return "", fmt.Errorf("Failed get vmid: %s\n", err)
+		return "", fmt.Errorf("Failed get vmid: %s", err)
 	}
 
 	return vmid, nil
 }
 
-func getBootDiskPath(c *Config, vmid string) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// GetBootDiskPath gets the path of the VM's book disk VMDK
+func GetBootDiskPath(c *Config, vmid string) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getBootDiskPath]\n")
 
-	var remote_cmd, stdout string
+	var remoteCmd, stdout string
 	var err error
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/device.getdevices %s | grep -A10 'key = 2000'|grep -m 1 fileName", vmid)
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get boot disk")
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/device.getdevices %s | grep -A10 'key = 2000'|grep -m 1 fileName", vmid)
+	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get boot disk")
 	if err != nil {
 		log.Printf("[getBootDiskPath] Failed get boot disk path: %s\n", stdout)
 		return "Failed get boot disk path:", err
@@ -68,55 +71,58 @@ func getBootDiskPath(c *Config, vmid string) (string, error) {
 	return r.Replace(stdout), err
 }
 
-func getDst_vmx_file(c *Config, vmid string) (string, string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// GetDestVmxAbsPath gets the absolute path for the VMX file on the host
+func GetDestVmxAbsPath(c *Config, vmid string) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getDst_vmx_file]\n")
 
-	var dst_vmx_ds, dst_vmx, dst_vmx_file_path string
+	var destVmxDiskStore, destVmxPath, destVmxAbsPath string
 
 	//      -Get location of vmx file on esxi host
-	remote_cmd := fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
-	stdout, err := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get dst_vmx_ds")
-	dst_vmx_ds = stdout
-	dst_vmx_ds = strings.Trim(dst_vmx_ds, "[")
-	dst_vmx_ds = strings.Trim(dst_vmx_ds, "]")
+	remoteCmd := fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
+	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx_ds")
+	destVmxDiskStore = stdout
+	destVmxDiskStore = strings.Trim(destVmxDiskStore, "[")
+	destVmxDiskStore = strings.Trim(destVmxDiskStore, "]")
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|awk '{print $NF}'|sed 's/[\"|,]//g'", vmid)
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get dst_vmx")
-	dst_vmx = stdout
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|awk '{print $NF}'|sed 's/[\"|,]//g'", vmid)
+	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx")
+	destVmxPath = stdout
 
-	dst_vmx_file_path = "/vmfs/volumes/" + dst_vmx_ds + "/" + dst_vmx
-	return dst_vmx_file_path, dst_vmx, err
+	destVmxAbsPath = "/vmfs/volumes/" + destVmxDiskStore + "/" + destVmxPath
+	return destVmxAbsPath, err
 }
 
-func readVmx_contents(c *Config, vmid string) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// ReadVmxContent reads the content of a VMX file on the host machine
+func ReadVmxContent(c *Config, vmid string) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getVmx_contents]\n")
 
-	var remote_cmd, vmx_contents string
+	var remoteCmd, vmxContent string
 
-	dst_vmx_file, _, err := getDst_vmx_file(c, vmid)
-	remote_cmd = fmt.Sprintf("cat \"%s\"", dst_vmx_file)
-	vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "read guest_name.vmx file")
+	destVmxFile, err := GetDestVmxAbsPath(c, vmid)
+	remoteCmd = fmt.Sprintf("cat \"%s\"", destVmxFile)
+	vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "read guest_name.vmx file")
 
-	return vmx_contents, err
+	return vmxContent, err
 }
 
-func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
-	virthwver int, guestos string, virtual_networks [10][3]string, virtual_disks [60][2]string, notes string,
+// UpdateVmx updates the VMX file on the host
+func UpdateVmx(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
+	virthwver int, guestos string, virtualNetworks [10][3]string, virtualDisks [60][2]string, notes string,
 	guestinfo map[string]interface{}) error {
 
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[updateVmx_contents]\n")
 
-	var regexReplacement, remote_cmd string
+	var regexReplacement, remoteCmd string
 
-	vmx_contents, err := readVmx_contents(c, vmid)
+	vmxContent, err := ReadVmxContent(c, vmid)
 	if err != nil {
 		log.Printf("[updateVmx_contents] Failed get vmx contents: %s\n", err)
 		return err
 	}
-	if strings.Contains(vmx_contents, "Unable to find a VM corresponding") {
+	if strings.Contains(vmxContent, "Unable to find a VM corresponding") {
 		return nil
 	}
 
@@ -124,57 +130,57 @@ func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numv
 	if memsize != 0 {
 		re := regexp.MustCompile("memSize = \".*\"")
 		regexReplacement = fmt.Sprintf("memSize = \"%d\"", memsize)
-		vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+		vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 	}
 
 	// modify numvcpus
 	if numvcpus != 0 {
 		re := regexp.MustCompile("numvcpus = \".*\"")
 		regexReplacement = fmt.Sprintf("numvcpus = \"%d\"", numvcpus)
-		vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+		vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 	}
 
 	// modify virthwver
 	if virthwver != 0 {
 		re := regexp.MustCompile("virtualHW.version = \".*\"")
 		regexReplacement = fmt.Sprintf("virtualHW.version = \"%d\"", virthwver)
-		vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+		vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 	}
 
 	// modify guestos
 	if guestos != "" {
 		re := regexp.MustCompile("guestOS = \".*\"")
 		regexReplacement = fmt.Sprintf("guestOS = \"%s\"", guestos)
-		vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+		vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 	}
 
 	// modify annotation
 	if notes != "" {
 		notes = strings.Replace(notes, "\"", "|22", -1)
-		if strings.Contains(vmx_contents, "annotation") {
+		if strings.Contains(vmxContent, "annotation") {
 			re := regexp.MustCompile("annotation = \".*\"")
 			regexReplacement = fmt.Sprintf("annotation = \"%s\"", notes)
-			vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+			vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 		} else {
 			regexReplacement = fmt.Sprintf("\nannotation = \"%s\"", notes)
-			vmx_contents += regexReplacement
+			vmxContent += regexReplacement
 		}
 	}
 
 	if len(guestinfo) > 0 {
-		parsed_vmx := ParseVMX(vmx_contents)
+		parsedVmx := ParseVmxFile(vmxContent)
 		for k, v := range guestinfo {
 			log.Println("SAVING", k, v)
-			parsed_vmx["guestinfo."+k] = v.(string)
+			parsedVmx["guestinfo."+k] = v.(string)
 		}
-		vmx_contents = EncodeVMX(parsed_vmx)
+		vmxContent = BuildVmxString(parsedVmx)
 	}
 
 	//
 	//  add/modify virtual disks
 	//
 	var tmpvar string
-	var vmx_contents_new string
+	var newVmxContent string
 	var i, j int
 
 	//
@@ -186,7 +192,7 @@ func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numv
 
 			if (i != 0 || j != 0) && j != 7 {
 				re := regexp.MustCompile(fmt.Sprintf("scsi%d:%d.*\n", i, j))
-				vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+				vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 			}
 		}
 	}
@@ -195,27 +201,27 @@ func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numv
 	//  Add disks that are managed by terraform
 	//
 	for i = 0; i < 59; i++ {
-		if virtual_disks[i][0] != "" {
+		if virtualDisks[i][0] != "" {
 
-			log.Printf("[updateVmx_contents] Adding: %s\n", virtual_disks[i][1])
-			tmpvar = fmt.Sprintf("scsi%s.deviceType = \"scsi-hardDisk\"\n", virtual_disks[i][1])
-			if !strings.Contains(vmx_contents, tmpvar) {
-				vmx_contents += "\n" + tmpvar
+			log.Printf("[updateVmx_contents] Adding: %s\n", virtualDisks[i][1])
+			tmpvar = fmt.Sprintf("scsi%s.deviceType = \"scsi-hardDisk\"\n", virtualDisks[i][1])
+			if !strings.Contains(vmxContent, tmpvar) {
+				vmxContent += "\n" + tmpvar
 			}
 
-			tmpvar = fmt.Sprintf("scsi%s.fileName", virtual_disks[i][1])
-			if strings.Contains(vmx_contents, tmpvar) {
+			tmpvar = fmt.Sprintf("scsi%s.fileName", virtualDisks[i][1])
+			if strings.Contains(vmxContent, tmpvar) {
 				re := regexp.MustCompile(tmpvar + " = \".*\"")
-				regexReplacement = fmt.Sprintf(tmpvar+" = \"%s\"", virtual_disks[i][0])
-				vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+				regexReplacement = fmt.Sprintf(tmpvar+" = \"%s\"", virtualDisks[i][0])
+				vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 			} else {
-				regexReplacement = fmt.Sprintf("\n"+tmpvar+" = \"%s\"", virtual_disks[i][0])
-				vmx_contents += "\n" + regexReplacement
+				regexReplacement = fmt.Sprintf("\n"+tmpvar+" = \"%s\"", virtualDisks[i][0])
+				vmxContent += "\n" + regexReplacement
 			}
 
-			tmpvar = fmt.Sprintf("scsi%s.present = \"true\"\n", virtual_disks[i][1])
-			if !strings.Contains(vmx_contents, tmpvar) {
-				vmx_contents += "\n" + tmpvar
+			tmpvar = fmt.Sprintf("scsi%s.present = \"true\"\n", virtualDisks[i][1])
+			if !strings.Contains(vmxContent, tmpvar) {
+				vmxContent += "\n" + tmpvar
 			}
 
 		}
@@ -227,19 +233,19 @@ func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numv
 
 	//  Define default nic type.
 	var defaultNetworkType, networkType string
-	if virtual_networks[0][2] != "" {
-		defaultNetworkType = virtual_networks[0][2]
+	if virtualNetworks[0][2] != "" {
+		defaultNetworkType = virtualNetworks[0][2]
 	} else {
 		defaultNetworkType = "e1000"
 	}
 
 	//  If this is first time provisioning, delete all the old ethernet configuration.
 	if iscreate == true {
-		log.Printf("[updateVmx_contents] Delete old ethernet configuration\n", i)
+		log.Printf("[updateVmx_contents] Delete old ethernet configuration\n")
 		regexReplacement = fmt.Sprintf("")
 		for i = 0; i < 9; i++ {
 			re := regexp.MustCompile(fmt.Sprintf("ethernet%d.*\n", i))
-			vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+			vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 		}
 	}
 
@@ -249,107 +255,108 @@ func updateVmx_contents(c *Config, vmid string, iscreate bool, memsize int, numv
 	for i := 0; i <= 9; i++ {
 		log.Printf("[updateVmx_contents] ethernet%d\n", i)
 
-		if virtual_networks[i][0] == "" && strings.Contains(vmx_contents, "ethernet"+strconv.Itoa(i)) == true {
+		if virtualNetworks[i][0] == "" && strings.Contains(vmxContent, "ethernet"+strconv.Itoa(i)) == true {
 			//  This is Modify (Delete existing network configuration)
 			log.Printf("[updateVmx_contents] ethernet%d Delete existing.\n", i)
 			regexReplacement = fmt.Sprintf("")
 			re := regexp.MustCompile(fmt.Sprintf("ethernet%d.*\n", i))
-			vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+			vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 		}
 
-		if virtual_networks[i][0] != "" && strings.Contains(vmx_contents, "ethernet"+strconv.Itoa(i)) == true {
+		if virtualNetworks[i][0] != "" && strings.Contains(vmxContent, "ethernet"+strconv.Itoa(i)) == true {
 			//  This is Modify
 			log.Printf("[updateVmx_contents] ethernet%d Modify existing.\n", i)
 
 			//  Modify Network Name
 			re := regexp.MustCompile("ethernet" + strconv.Itoa(i) + ".networkName = \".*\"")
-			regexReplacement = fmt.Sprintf("ethernet"+strconv.Itoa(i)+".networkName = \"%s\"", virtual_networks[i][0])
-			vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+			regexReplacement = fmt.Sprintf("ethernet"+strconv.Itoa(i)+".networkName = \"%s\"", virtualNetworks[i][0])
+			vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 
 			//  Modify virtual Device
 			re = regexp.MustCompile("ethernet" + strconv.Itoa(i) + ".virtualDev = \".*\"")
-			regexReplacement = fmt.Sprintf("ethernet"+strconv.Itoa(i)+".virtualDev = \"%s\"", virtual_networks[i][2])
-			vmx_contents = re.ReplaceAllString(vmx_contents, regexReplacement)
+			regexReplacement = fmt.Sprintf("ethernet"+strconv.Itoa(i)+".virtualDev = \"%s\"", virtualNetworks[i][2])
+			vmxContent = re.ReplaceAllString(vmxContent, regexReplacement)
 
 			//  Modify MAC  todo
 		}
 
-		if virtual_networks[i][0] != "" && strings.Contains(vmx_contents, "ethernet"+strconv.Itoa(i)) == false {
+		if virtualNetworks[i][0] != "" && strings.Contains(vmxContent, "ethernet"+strconv.Itoa(i)) == false {
 			//  This is create
 
 			//  Set virtual_network name
-			log.Printf("[updateVmx_contents] ethernet%d Create New: %s\n", i, virtual_networks[i][0])
-			tmpvar = fmt.Sprintf("\nethernet%d.networkName = \"%s\"\n", i, virtual_networks[i][0])
-			vmx_contents_new = tmpvar
+			log.Printf("[updateVmx_contents] ethernet%d Create New: %s\n", i, virtualNetworks[i][0])
+			tmpvar = fmt.Sprintf("\nethernet%d.networkName = \"%s\"\n", i, virtualNetworks[i][0])
+			newVmxContent = tmpvar
 
 			//  Set mac address
-			if virtual_networks[i][1] != "" {
+			if virtualNetworks[i][1] != "" {
 				tmpvar = fmt.Sprintf("ethernet%d.addressType = \"static\"\n", i)
-				vmx_contents_new = vmx_contents_new + tmpvar
+				newVmxContent = newVmxContent + tmpvar
 
-				tmpvar = fmt.Sprintf("ethernet%d.address = \"%s\"\n", i, virtual_networks[i][1])
-				vmx_contents_new = vmx_contents_new + tmpvar
+				tmpvar = fmt.Sprintf("ethernet%d.address = \"%s\"\n", i, virtualNetworks[i][1])
+				newVmxContent = newVmxContent + tmpvar
 			}
 
 			//  Set network type
-			if virtual_networks[i][2] == "" {
+			if virtualNetworks[i][2] == "" {
 				networkType = defaultNetworkType
 			} else {
-				networkType = virtual_networks[i][2]
+				networkType = virtualNetworks[i][2]
 			}
 
 			tmpvar = fmt.Sprintf("ethernet%d.virtualDev = \"%s\"\n", i, networkType)
-			vmx_contents_new = vmx_contents_new + tmpvar
+			newVmxContent = newVmxContent + tmpvar
 
 			tmpvar = fmt.Sprintf("ethernet%d.present = \"TRUE\"\n", i)
 
-			vmx_contents = vmx_contents + vmx_contents_new + tmpvar
+			vmxContent = vmxContent + newVmxContent + tmpvar
 		}
 	}
 
 	//
 	//  Write vmx file to esxi host
 	//
-	vmx_contents = strings.Replace(vmx_contents, "\"", "\\\"", -1)
-	log.Printf("[updateVmx_contents] New guest_name.vmx: %s\n", vmx_contents)
+	log.Printf("[updateVmx_contents] New guest_name.vmx: %s\n", vmxContent)
 
-	dst_vmx_file_path, dst_vmx_file, err := getDst_vmx_file(c, vmid)
+	destVmxFilePath, err := GetDestVmxAbsPath(c, vmid)
+	vmxFileName := GetVmxFileFromPath(destVmxFilePath)
 
 	if err != nil {
 		log.Printf("[updateVmx_contents] Failed to get VMX file name from ESXi: %s\n", err)
 		return err
 	}
 
-	err = writeStringToFile(dst_vmx_file, vmx_contents)
+	err = SaveVmxStringToDisk(vmxFileName, vmxContent)
 
 	if err != nil {
 		return err
 	}
 
-	err = copyFileViaScp(esxiSSHinfo, dst_vmx_file, dst_vmx_file_path)
+	err = CopyFileToHost(esxiSSHinfo, vmxFileName, destVmxFilePath)
 
 	if err != nil {
 		return err
 	}
 
-	err = deleteFile(dst_vmx_file)
+	err = DeleteVmx(vmxFileName)
 
 	if err != nil {
 		return err
 	}
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/reload %s", vmid)
-	_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/reload")
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/reload %s", vmid)
+	_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/reload")
 	return err
 }
 
-func cleanStorageFromVmx(c *Config, vmid string) error {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// CleanVmxStorage cleans the VMX file storage data
+func CleanVmxStorage(c *Config, vmid string) error {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[cleanStorageFromVmx]\n")
 
-	var remote_cmd string
+	var remoteCmd string
 
-	vmx_contents, err := readVmx_contents(c, vmid)
+	vmxContent, err := ReadVmxContent(c, vmid)
 	if err != nil {
 		log.Printf("[updateVmx_contents] Failed get vmx contents: %s\n", err)
 		return err
@@ -360,7 +367,7 @@ func cleanStorageFromVmx(c *Config, vmid string) error {
 			if !(x == 0 && y == 0) {
 				regexReplacement := fmt.Sprintf("scsi%d:%d.*", x, y)
 				re := regexp.MustCompile(regexReplacement)
-				vmx_contents = re.ReplaceAllString(vmx_contents, "")
+				vmxContent = re.ReplaceAllString(vmxContent, "")
 			}
 		}
 	}
@@ -368,81 +375,84 @@ func cleanStorageFromVmx(c *Config, vmid string) error {
 	//
 	//  Write vmx file to esxi host
 	//
-	vmx_contents = strings.Replace(vmx_contents, "\"", "\\\"", -1)
+	vmxContent = strings.Replace(vmxContent, "\"", "\\\"", -1)
 
-	dst_vmx_file, _, err := getDst_vmx_file(c, vmid)
+	destVmxFile, err := GetDestVmxAbsPath(c, vmid)
 
-	remote_cmd = fmt.Sprintf("echo \"%s\" | grep '[^[:blank:]]' >%s", vmx_contents, dst_vmx_file)
-	vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "write guest_name.vmx file")
+	remoteCmd = fmt.Sprintf("echo \"%s\" | grep '[^[:blank:]]' >%s", vmxContent, destVmxFile)
+	vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "write guest_name.vmx file")
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/reload %s", vmid)
-	_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/reload")
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/reload %s", vmid)
+	_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/reload")
 	return err
 }
 
-func guestPowerOn(c *Config, vmid string) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// PowerOnGuest powers on the guest VM
+func PowerOnGuest(c *Config, vmid string) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestPowerOn]\n")
 
-	if guestPowerGetState(c, vmid) == "on" {
+	if GetGuestPowerState(c, vmid) == "on" {
 		return "", nil
 	}
 
-	remote_cmd := fmt.Sprintf("vim-cmd vmsvc/power.on %s", vmid)
-	stdout, err := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/power.on")
+	remoteCmd := fmt.Sprintf("vim-cmd vmsvc/power.on %s", vmid)
+	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.on")
 	time.Sleep(3 * time.Second)
 
-	if guestPowerGetState(c, vmid) == "on" {
+	if GetGuestPowerState(c, vmid) == "on" {
 		return stdout, nil
 	}
 
 	return stdout, err
 }
 
-func guestPowerOff(c *Config, vmid string, guest_shutdown_timeout int) (string, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// PowerOffGuest powers off the guest VM
+func PowerOffGuest(c *Config, vmid string, guestShutdownTimeout int) (string, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestPowerOff]\n")
 
-	var remote_cmd, stdout string
+	var remoteCmd, stdout string
 
-	savedpowerstate := guestPowerGetState(c, vmid)
+	savedpowerstate := GetGuestPowerState(c, vmid)
 	if savedpowerstate == "off" {
 		return "", nil
 
 	} else if savedpowerstate == "on" {
 
-		if guest_shutdown_timeout != 0 {
-			remote_cmd = fmt.Sprintf("vim-cmd vmsvc/power.shutdown %s", vmid)
-			stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/power.shutdown")
+		if guestShutdownTimeout != 0 {
+			remoteCmd = fmt.Sprintf("vim-cmd vmsvc/power.shutdown %s", vmid)
+			stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.shutdown")
 			time.Sleep(3 * time.Second)
 
-			for i := 0; i < (guest_shutdown_timeout / 3); i++ {
-				if guestPowerGetState(c, vmid) == "off" {
+			for i := 0; i < (guestShutdownTimeout / 3); i++ {
+				if GetGuestPowerState(c, vmid) == "off" {
 					return stdout, nil
 				}
 				time.Sleep(3 * time.Second)
 			}
 		}
 
-		remote_cmd = fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmid)
-		stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/power.off")
+		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmid)
+		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.off")
 		time.Sleep(1 * time.Second)
 
 		return stdout, nil
 
 	} else {
-		remote_cmd = fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmid)
-		stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/power.off")
+		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmid)
+		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.off")
 		return stdout, nil
 	}
 }
 
-func guestPowerGetState(c *Config, vmid string) string {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// GetGuestPowerState returns whether the guest VM is powered on or off
+func GetGuestPowerState(c *Config, vmid string) string {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestPowerGetState]\n")
 
-	remote_cmd := fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmid)
-	stdout, _ := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmsvc/power.getstate")
+	remoteCmd := fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmid)
+	stdout, _ := RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.getstate")
 	if strings.Contains(stdout, "Unable to find a VM corresponding") {
 		return "Unknown"
 	}
@@ -458,15 +468,16 @@ func guestPowerGetState(c *Config, vmid string) string {
 	}
 }
 
-func guestGetIpAddress(c *Config, vmid string, guest_startup_timeout int) string {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// GetGuestIPAddress gets the guest VM's IP address
+func GetGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestGetIpAddress]\n")
 
-	var remote_cmd, stdout, ip_address, ip_address2 string
+	var remoteCmd, stdout, ipAddress, ipAddress2 string
 	var uptime int
 
 	//  Check if powered off
-	if guestPowerGetState(c, vmid) != "on" {
+	if GetGuestPowerState(c, vmid) != "on" {
 		return ""
 	}
 
@@ -474,20 +485,20 @@ func guestGetIpAddress(c *Config, vmid string, guest_startup_timeout int) string
 	//  Check uptime of guest.
 	//
 	uptime = 0
-	for uptime < guest_startup_timeout {
+	for uptime < guestStartupTimeout {
 		//  Primary method to get IP
-		remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.guest %s 2>/dev/null |grep -A 5 'deviceConfigId = 4000' |tail -1|grep -oE '((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5]).){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'", vmid)
-		stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get ip_address method 1")
-		ip_address = stdout
-		if ip_address != "" {
-			return ip_address
+		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.guest %s 2>/dev/null |grep -A 5 'deviceConfigId = 4000' |tail -1|grep -oE '((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5]).){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'", vmid)
+		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "get ip_address method 1")
+		ipAddress = stdout
+		if ipAddress != "" {
+			return ipAddress
 		}
 
 		time.Sleep(3 * time.Second)
 
 		//  Get uptime if above failed.
-		remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.summary %s 2>/dev/null | grep 'uptimeSeconds ='|sed 's/^.*= //g'|sed s/,//g", vmid)
-		stdout, err := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get uptime")
+		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.summary %s 2>/dev/null | grep 'uptimeSeconds ='|sed 's/^.*= //g'|sed s/,//g", vmid)
+		stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "get uptime")
 		if err != nil {
 			return ""
 		}
@@ -497,15 +508,15 @@ func guestGetIpAddress(c *Config, vmid string, guest_startup_timeout int) string
 	//
 	// Alternate method to get IP
 	//
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.summary %s 2>/dev/null | grep 'uptimeSeconds ='|sed 's/^.*= //g'|sed s/,//g", vmid)
-	stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get uptime")
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.summary %s 2>/dev/null | grep 'uptimeSeconds ='|sed 's/^.*= //g'|sed s/,//g", vmid)
+	stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "get uptime")
 	uptime, _ = strconv.Atoi(stdout)
 	if uptime > 120 {
-		remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.guest %s 2>/dev/null | grep -m 1 '^   ipAddress = ' | grep -oE '((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5]).){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'", vmid)
-		stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get ip_address method 2")
-		ip_address2 = stdout
-		if ip_address2 != "" {
-			return ip_address2
+		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.guest %s 2>/dev/null | grep -m 1 '^   ipAddress = ' | grep -oE '((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5]).){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'", vmid)
+		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "get ip_address method 2")
+		ipAddress2 = stdout
+		if ipAddress2 != "" {
+			return ipAddress2
 		}
 	}
 

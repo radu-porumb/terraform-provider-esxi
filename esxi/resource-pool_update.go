@@ -2,127 +2,129 @@ package esxi
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform/helper/schema"
 	"log"
 	"strconv"
 	"strings"
+
+	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceRESOURCEPOOLUpdate(d *schema.ResourceData, m interface{}) error {
+// UpdateResourcePoolResource updates a resource pool resource
+func UpdateResourcePoolResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[resourceRESOURCEPOOLUpdate]")
 
-	var remote_cmd, stdout string
+	var remoteCmd, stdout string
 	var err error
 
-	pool_id := d.Id()
-	resource_pool_name := d.Get("resource_pool_name").(string)
-	cpu_min := d.Get("cpu_min").(int)
-	cpu_min_expandable := d.Get("cpu_min_expandable").(string)
-	cpu_max := d.Get("cpu_max").(int)
-	cpu_shares := strings.ToLower(d.Get("cpu_shares").(string))
-	mem_min := d.Get("mem_min").(int)
-	mem_min_expandable := d.Get("mem_min_expandable").(string)
-	mem_max := d.Get("mem_max").(int)
-	mem_shares := strings.ToLower(d.Get("mem_shares").(string))
+	poolID := d.Id()
+	resourcePoolName := d.Get("resource_pool_name").(string)
+	cpuMin := d.Get("cpu_min").(int)
+	cpuMinExpandable := d.Get("cpu_min_expandable").(string)
+	cpuMax := d.Get("cpu_max").(int)
+	cpuShares := strings.ToLower(d.Get("cpu_shares").(string))
+	memMin := d.Get("mem_min").(int)
+	memMinExpandable := d.Get("mem_min_expandable").(string)
+	memMax := d.Get("mem_max").(int)
+	memShares := strings.ToLower(d.Get("mem_shares").(string))
 
-	if resource_pool_name == string('/') {
-		resource_pool_name = "Resources"
+	if resourcePoolName == string('/') {
+		resourcePoolName = "Resources"
 	}
-	if resource_pool_name[0] == '/' {
-		resource_pool_name = resource_pool_name[1:]
+	if resourcePoolName[0] == '/' {
+		resourcePoolName = resourcePoolName[1:]
 	}
 
-	stdout, err = getPoolNAME(c, pool_id)
+	stdout, err = getResourcePoolName(c, poolID)
 	if err != nil {
 		return err
 	}
-	if stdout != resource_pool_name {
-		log.Printf("[resourceRESOURCEPOOLUpdate] rename %s %s", pool_id, resource_pool_name)
-		remote_cmd = fmt.Sprintf("vim-cmd hostsvc/rsrc/rename %s %s", pool_id, resource_pool_name)
-		stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "update resource pool")
+	if stdout != resourcePoolName {
+		log.Printf("[resourceRESOURCEPOOLUpdate] rename %s %s", poolID, resourcePoolName)
+		remoteCmd = fmt.Sprintf("vim-cmd hostsvc/rsrc/rename %s %s", poolID, resourcePoolName)
+		stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "update resource pool")
 		if err != nil {
 			return err
 		}
 	}
 
-	cpu_min_opt := ""
-	if cpu_min > 0 {
-		cpu_min_opt = fmt.Sprintf("--cpu-min=%d", cpu_min)
+	cpuMinOpt := ""
+	if cpuMin > 0 {
+		cpuMinOpt = fmt.Sprintf("--cpu-min=%d", cpuMin)
 	}
 
-	cpu_min_expandable_opt := "--cpu-min-expandable=true"
-	if cpu_min_expandable == "false" {
-		cpu_min_expandable_opt = "--cpu-min-expandable=false"
+	cpuMinExpandableOpt := "--cpu-min-expandable=true"
+	if cpuMinExpandable == "false" {
+		cpuMinExpandableOpt = "--cpu-min-expandable=false"
 	}
 
-	cpu_max_opt := ""
-	if cpu_max > 0 {
-		cpu_max_opt = fmt.Sprintf("--cpu-max=%d", cpu_max)
+	cpuMaxOpt := ""
+	if cpuMax > 0 {
+		cpuMaxOpt = fmt.Sprintf("--cpu-max=%d", cpuMax)
 	}
 
-	cpu_shares_opt := "--cpu-shares=normal"
-	if cpu_shares == "low" || cpu_shares == "high" {
-		cpu_shares_opt = fmt.Sprintf("--cpu-shares=%s", cpu_shares)
+	cpuSharesOpt := "--cpu-shares=normal"
+	if cpuShares == "low" || cpuShares == "high" {
+		cpuSharesOpt = fmt.Sprintf("--cpu-shares=%s", cpuShares)
 	} else {
-		tmp_var, err := strconv.Atoi(cpu_shares)
+		tmpVar, err := strconv.Atoi(cpuShares)
 		if err == nil {
-			cpu_shares_opt = fmt.Sprintf("--cpu-shares=%d", tmp_var)
+			cpuSharesOpt = fmt.Sprintf("--cpu-shares=%d", tmpVar)
 		}
 	}
 
-	mem_min_opt := ""
-	if mem_min > 0 {
-		mem_min_opt = fmt.Sprintf("--mem-min=%d", mem_min)
+	memMinOpt := ""
+	if memMin > 0 {
+		memMinOpt = fmt.Sprintf("--mem-min=%d", memMin)
 	}
 
-	mem_min_expandable_opt := "--mem-min-expandable=true"
-	if mem_min_expandable == "false" {
-		mem_min_expandable_opt = "--mem-min-expandable=false"
+	memMinExpandableOpt := "--mem-min-expandable=true"
+	if memMinExpandable == "false" {
+		memMinExpandableOpt = "--mem-min-expandable=false"
 	}
 
-	mem_max_opt := ""
-	if mem_max > 0 {
-		mem_max_opt = fmt.Sprintf("--mem-max=%d", mem_max)
+	memMaxOpt := ""
+	if memMax > 0 {
+		memMaxOpt = fmt.Sprintf("--mem-max=%d", memMax)
 	}
 
-	mem_shares_opt := "--mem-shares=normal"
-	if mem_shares == "low" || mem_shares == "high" {
-		mem_shares_opt = fmt.Sprintf("--mem-shares=%s", mem_shares)
+	memSharesOpt := "--mem-shares=normal"
+	if memShares == "low" || memShares == "high" {
+		memSharesOpt = fmt.Sprintf("--mem-shares=%s", memShares)
 	} else {
-		tmp_var, err := strconv.Atoi(mem_shares)
+		tmpVar, err := strconv.Atoi(memShares)
 		if err == nil {
-			mem_shares_opt = fmt.Sprintf("--mem-shares=%d", tmp_var)
+			memSharesOpt = fmt.Sprintf("--mem-shares=%d", tmpVar)
 		}
 	}
 
-	remote_cmd = fmt.Sprintf("vim-cmd hostsvc/rsrc/pool_config_set %s %s %s %s %s %s %s %s %s",
-		cpu_min_opt, cpu_min_expandable_opt, cpu_max_opt, cpu_shares_opt,
-		mem_min_opt, mem_min_expandable_opt, mem_max_opt, mem_shares_opt, pool_id)
+	remoteCmd = fmt.Sprintf("vim-cmd hostsvc/rsrc/pool_config_set %s %s %s %s %s %s %s %s %s",
+		cpuMinOpt, cpuMinExpandableOpt, cpuMaxOpt, cpuSharesOpt,
+		memMinOpt, memMinExpandableOpt, memMaxOpt, memSharesOpt, poolID)
 
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "update resource pool")
+	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "update resource pool")
 	log.Printf("[resourcePoolUPDATE] stdout |%s|\n", stdout)
 
 	r := strings.NewReplacer("'vim.ResourcePool:", "", "'", "")
 	stdout = r.Replace(stdout)
 
 	// Refresh
-	resource_pool_name, cpu_min, cpu_min_expandable, cpu_max, cpu_shares, mem_min, mem_min_expandable, mem_max, mem_shares, err = resourcePoolRead(c, pool_id)
+	resourcePoolName, cpuMin, cpuMinExpandable, cpuMax, cpuShares, memMin, memMinExpandable, memMax, memShares, err = readResourcePoolData(c, poolID)
 	if err != nil {
 		d.SetId("")
 		return nil
 	}
 
-	d.Set("resource_pool_name", resource_pool_name)
-	d.Set("cpu_min", cpu_min)
-	d.Set("cpu_min_expandable", cpu_min_expandable)
-	d.Set("cpu_max", cpu_max)
-	d.Set("cpu_shares", cpu_shares)
-	d.Set("mem_min", mem_min)
-	d.Set("mem_min_expandable", mem_min_expandable)
-	d.Set("mem_max", mem_max)
-	d.Set("mem_shares", mem_shares)
+	d.Set("resource_pool_name", resourcePoolName)
+	d.Set("cpu_min", cpuMin)
+	d.Set("cpu_min_expandable", cpuMinExpandable)
+	d.Set("cpu_max", cpuMax)
+	d.Set("cpu_shares", cpuShares)
+	d.Set("mem_min", memMin)
+	d.Set("mem_min_expandable", memMinExpandable)
+	d.Set("mem_max", memMax)
+	d.Set("mem_shares", memShares)
 
 	return nil
 }

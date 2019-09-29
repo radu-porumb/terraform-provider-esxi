@@ -12,30 +12,31 @@ import (
 	"strings"
 )
 
-func guestCREATE(c *Config, guest_name string, disk_store string,
-	src_path string, resource_pool_name string, strmemsize string, strnumvcpus string, strvirthwver string, guestos string,
-	boot_disk_type string, boot_disk_size string, virtual_networks [10][3]string,
-	virtual_disks [60][2]string, guest_shutdown_timeout int, notes string,
+// CreateGuest creates a guest VM on the host
+func CreateGuest(c *Config, guestName string, diskStore string,
+	srcPath string, resourcePoolName string, memSize string, numVCPUs string, virtHWver string, guestos string,
+	bootDiskType string, bootDiskSize string, virtualNetworks [10][3]string,
+	virtualDisks [60][2]string, guestShutdownTimeout int, notes string,
 	guestinfo map[string]interface{}) (string, error) {
 
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestCREATE]\n")
 
 	var memsize, numvcpus, virthwver int
-	var boot_disk_vmdkPATH, remote_cmd, vmid, stdout, vmx_contents string
+	var bootDiskVmdkPath, remoteCmd, vmid, stdout, vmxContent string
 	var osShellCmd, osShellCmdOpt string
 	var out bytes.Buffer
 	var err error
 	err = nil
 
-	memsize, _ = strconv.Atoi(strmemsize)
-	numvcpus, _ = strconv.Atoi(strnumvcpus)
-	virthwver, _ = strconv.Atoi(strvirthwver)
+	memsize, _ = strconv.Atoi(memSize)
+	numvcpus, _ = strconv.Atoi(numVCPUs)
+	virthwver, _ = strconv.Atoi(virtHWver)
 
 	//
 	//  Check if Disk Store already exists
 	//
-	err = diskStoreValidate(c, disk_store)
+	err = ValidateDiskStore(c, diskStore)
 	if err != nil {
 		return "", err
 	}
@@ -44,40 +45,40 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 	//  Check if guest already exists
 	//
 	// get VMID (by name)
-	vmid, err = guestGetVMID(c, guest_name)
+	vmid, err = GetGuestVMID(c, guestName)
 
 	if vmid != "" {
 		// We don't need to create the VM.   It already exists.
-		fmt.Printf("[guestCREATE] guest %s already exists vmid: \n", guest_name, stdout)
+		fmt.Printf("[guestCREATE] guest %s already exists vmid: %s\n", guestName, stdout)
 
 		//
 		//   Power off guest if it's powered on.
 		//
-		currentpowerstate := guestPowerGetState(c, vmid)
+		currentpowerstate := GetGuestPowerState(c, vmid)
 		if currentpowerstate == "on" || currentpowerstate == "suspended" {
-			_, err = guestPowerOff(c, vmid, guest_shutdown_timeout)
+			_, err = PowerOffGuest(c, vmid, guestShutdownTimeout)
 			if err != nil {
-				return "", fmt.Errorf("Failed to power off existing guest. vmid:%s\n", vmid)
+				return "", fmt.Errorf("Failed to power off existing guest. vmid:%s", vmid)
 			}
 		}
 
-	} else if src_path == "none" {
+	} else if srcPath == "none" {
 
 		// check if path already exists.
-		fullPATH := fmt.Sprintf("\"/vmfs/volumes/%s/%s\"", disk_store, guest_name)
-		boot_disk_vmdkPATH = fmt.Sprintf("\"/vmfs/volumes/%s/%s/%s.vmdk\"", disk_store, guest_name, guest_name)
-		remote_cmd = fmt.Sprintf("ls -d %s", fullPATH)
-		stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "check if guest path already exists.")
+		fullPATH := fmt.Sprintf("\"/vmfs/volumes/%s/%s\"", diskStore, guestName)
+		bootDiskVmdkPath = fmt.Sprintf("\"/vmfs/volumes/%s/%s/%s.vmdk\"", diskStore, guestName, guestName)
+		remoteCmd = fmt.Sprintf("ls -d %s", fullPATH)
+		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "check if guest path already exists.")
 		if stdout == fullPATH {
 			fmt.Printf("Error: Guest path already exists. fullPATH:%s\n", fullPATH)
-			return "", fmt.Errorf("Guest path already exists. fullPATH:%s\n", fullPATH)
-		} else {
-			remote_cmd = fmt.Sprintf("mkdir %s", fullPATH)
-			stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "create guest path")
-			if err != nil {
-				log.Printf("Failed to create guest path. fullPATH:%s\n", fullPATH)
-				return "", fmt.Errorf("Failed to create guest path. fullPATH:%s\n", fullPATH)
-			}
+			return "", fmt.Errorf("Guest path already exists. fullPATH:%s", fullPATH)
+		}
+
+		remoteCmd = fmt.Sprintf("mkdir %s", fullPATH)
+		stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "create guest path")
+		if err != nil {
+			log.Printf("Failed to create guest path. fullPATH:%s\n", fullPATH)
+			return "", fmt.Errorf("Failed to create guest path. fullPATH:%s", fullPATH)
 		}
 
 		hasISO := false
@@ -96,15 +97,15 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 		if guestos == "" {
 			guestos = "centos-64"
 		}
-		if boot_disk_size == "" {
-			boot_disk_size = "16"
+		if bootDiskSize == "" {
+			bootDiskSize = "16"
 		}
 
 		// Build VM by default/black config
-		vmx_contents =
+		vmxContent =
 			fmt.Sprintf("config.version = \\\"8\\\"\n") +
 				fmt.Sprintf("virtualHW.version = \\\"%d\\\"\n", virthwver) +
-				fmt.Sprintf("displayName = \\\"%s\\\"\n", guest_name) +
+				fmt.Sprintf("displayName = \\\"%s\\\"\n", guestName) +
 				fmt.Sprintf("numvcpus = \\\"%d\\\"\n", numvcpus) +
 				fmt.Sprintf("memSize = \\\"%d\\\"\n", memsize) +
 				fmt.Sprintf("guestOS = \\\"%s\\\"\n", guestos) +
@@ -127,17 +128,17 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 				fmt.Sprintf("pciBridge7.virtualDev = \\\"pcieRootPort\\\"\n") +
 				fmt.Sprintf("pciBridge7.functions = \\\"8\\\"\n") +
 				fmt.Sprintf("scsi0:0.present = \\\"TRUE\\\"\n") +
-				fmt.Sprintf("scsi0:0.fileName = \\\"%s.vmdk\\\"\n", guest_name) +
+				fmt.Sprintf("scsi0:0.fileName = \\\"%s.vmdk\\\"\n", guestName) +
 				fmt.Sprintf("scsi0:0.deviceType = \\\"scsi-hardDisk\\\"\n")
 		if hasISO == true {
-			vmx_contents = vmx_contents +
+			vmxContent = vmxContent +
 				fmt.Sprintf("ide1:0.present = \\\"TRUE\\\"\n") +
 				fmt.Sprintf("ide1:0.fileName = \\\"emptyBackingString\\\"\n") +
 				fmt.Sprintf("ide1:0.deviceType = \\\"atapi-cdrom\\\"\n") +
 				fmt.Sprintf("ide1:0.startConnected = \\\"FALSE\\\"\n") +
 				fmt.Sprintf("ide1:0.clientDevice = \\\"TRUE\\\"\n")
 		} else {
-			vmx_contents = vmx_contents +
+			vmxContent = vmxContent +
 				fmt.Sprintf("ide1:0.present = \\\"TRUE\\\"\n") +
 				fmt.Sprintf("ide1:0.fileName = \\\"%s\\\"\n", isofilename) +
 				fmt.Sprintf("ide1:0.deviceType = \\\"cdrom-image\\\"\n")
@@ -146,97 +147,97 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 		//
 		//  Write vmx file to esxi host
 		//
-		log.Printf("[guestCREATE] New guest_name.vmx: %s\n", vmx_contents)
+		log.Printf("[guestCREATE] New guest_name.vmx: %s\n", vmxContent)
 
-		dst_vmx_file := fmt.Sprintf("%s/%s.vmx", fullPATH, guest_name)
+		destVmxFile := fmt.Sprintf("%s/%s.vmx", fullPATH, guestName)
 
-		remote_cmd = fmt.Sprintf("echo \"%s\" >%s", vmx_contents, dst_vmx_file)
-		vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "write guest_name.vmx file")
+		remoteCmd = fmt.Sprintf("echo \"%s\" >%s", vmxContent, destVmxFile)
+		vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "write guest_name.vmx file")
 
 		//  Create boot disk (vmdk)
-		remote_cmd = fmt.Sprintf("vmkfstools -c %sG -d %s %s/%s.vmdk", boot_disk_size, boot_disk_type, fullPATH, guest_name)
-		_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "vmkfstools (make boot disk)")
+		remoteCmd = fmt.Sprintf("vmkfstools -c %sG -d %s %s/%s.vmdk", bootDiskSize, bootDiskType, fullPATH, guestName)
+		_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "vmkfstools (make boot disk)")
 		if err != nil {
-			remote_cmd = fmt.Sprintf("rm -fr %s", fullPATH)
-			stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "cleanup guest path because of failed events")
+			remoteCmd = fmt.Sprintf("rm -fr %s", fullPATH)
+			stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "cleanup guest path because of failed events")
 			log.Printf("Failed to vmkfstools (make boot disk):%s\n", err.Error())
-			return "", fmt.Errorf("Failed to vmkfstools (make boot disk):%s\n", err.Error())
+			return "", fmt.Errorf("Failed to vmkfstools (make boot disk):%s", err.Error())
 		}
 
-		poolID, err := getPoolID(c, resource_pool_name)
+		poolID, err := getResourcePoolID(c, resourcePoolName)
 		log.Println("[guestCREATE] DEBUG: " + poolID)
 		if err != nil {
 			log.Printf("Failed to use Resource Pool ID:%s\n", poolID)
-			return "", fmt.Errorf("Failed to use Resource Pool ID:%s\n", poolID)
+			return "", fmt.Errorf("Failed to use Resource Pool ID:%s", poolID)
 		}
-		remote_cmd = fmt.Sprintf("vim-cmd solo/registervm %s %s %s", dst_vmx_file, guest_name, poolID)
-		_, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "solo/registervm")
+		remoteCmd = fmt.Sprintf("vim-cmd solo/registervm %s %s %s", destVmxFile, guestName, poolID)
+		_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "solo/registervm")
 		if err != nil {
 			log.Printf("Failed to register guest:%s\n", err.Error())
-			remote_cmd = fmt.Sprintf("rm -fr %s", fullPATH)
-			stdout, _ = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "cleanup guest path because of failed events")
-			return "", fmt.Errorf("Failed to register guest:%s\n", err.Error())
+			remoteCmd = fmt.Sprintf("rm -fr %s", fullPATH)
+			stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "cleanup guest path because of failed events")
+			return "", fmt.Errorf("Failed to register guest:%s", err.Error())
 		}
 
 	} else {
 		//  Build VM by ovftool
 
 		//  Check if source file exist.
-		if !strings.HasPrefix(src_path, "vi://") {
-			if _, err := os.Stat(src_path); os.IsNotExist(err) {
-				return "", fmt.Errorf("File not found: %s\n", src_path)
+		if !strings.HasPrefix(srcPath, "vi://") {
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				return "", fmt.Errorf("File not found: %s", srcPath)
 			}
 		}
 
 		//  Set params for ovftool
-		if boot_disk_type == "zeroedthick" {
-			boot_disk_type = "thick"
+		if bootDiskType == "zeroedthick" {
+			bootDiskType = "thick"
 		}
 		password := url.QueryEscape(c.esxiPassword)
-		dst_path := fmt.Sprintf("vi://%s:%s@%s/%s", c.esxiUserName, password, c.esxiHostName, resource_pool_name)
+		destPath := fmt.Sprintf("vi://%s:%s@%s/%s", c.esxiUserName, password, c.esxiHostName, resourcePoolName)
 
-		net_param := ""
-		if (strings.HasSuffix(src_path, ".ova") || strings.HasSuffix(src_path, ".ovf")) && virtual_networks[0][0] != "" {
-			net_param = " --network='" + virtual_networks[0][0] + "'"
+		networkParam := ""
+		if (strings.HasSuffix(srcPath, ".ova") || strings.HasSuffix(srcPath, ".ovf")) && virtualNetworks[0][0] != "" {
+			networkParam = " --network='" + virtualNetworks[0][0] + "'"
 		}
 
-		ovf_cmd := fmt.Sprintf("ovftool --acceptAllEulas --noSSLVerify --X:useMacNaming=false "+
-			"-dm=%s --name='%s' --overwrite -ds='%s' %s '%s' '%s'", boot_disk_type, guest_name, disk_store, net_param, src_path, dst_path)
+		ovfCmd := fmt.Sprintf("ovftool --acceptAllEulas --noSSLVerify --X:useMacNaming=false "+
+			"-dm=%s --name='%s' --overwrite -ds='%s' %s '%s' '%s'", bootDiskType, guestName, diskStore, networkParam, srcPath, destPath)
 
 		if runtime.GOOS == "windows" {
 			osShellCmd = "cmd.exe"
 			osShellCmdOpt = "/c"
 
-			ovf_cmd = strings.Replace(ovf_cmd, "'", "\"", -1)
+			ovfCmd = strings.Replace(ovfCmd, "'", "\"", -1)
 
-			var ovf_bat = "ovf_cmd.bat"
+			var ovfBat = "ovf_cmd.bat"
 
-			_, err = os.Stat(ovf_bat)
+			_, err = os.Stat(ovfBat)
 
 			// delete file if exists
 			if os.IsExist(err) {
-				err = os.Remove(ovf_bat)
+				err = os.Remove(ovfBat)
 				if err != nil {
-					return "", fmt.Errorf("Unable to delete %s: %s\n", ovf_bat, err.Error())
+					return "", fmt.Errorf("Unable to delete %s: %s", ovfBat, err.Error())
 				}
 			}
 
 			//  create new batch file
-			file, err := os.Create(ovf_bat)
+			file, err := os.Create(ovfBat)
 			if err != nil {
-				return "", fmt.Errorf("Unable to create %s: %s\n", ovf_bat, err.Error())
 				defer file.Close()
+				return "", fmt.Errorf("Unable to create %s: %s", ovfBat, err.Error())
 			}
 
-			_, err = file.WriteString(ovf_cmd)
+			_, err = file.WriteString(ovfCmd)
 			if err != nil {
-				return "", fmt.Errorf("Unable to write to %s: %s\n", ovf_bat, err.Error())
 				defer file.Close()
+				return "", fmt.Errorf("Unable to write to %s: %s", ovfBat, err.Error())
 			}
 
 			err = file.Sync()
 			defer file.Close()
-			ovf_cmd = ovf_bat
+			ovfCmd = ovfBat
 
 		} else {
 			osShellCmd = "/bin/bash"
@@ -244,9 +245,9 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 		}
 
 		//  Execute ovftool script (or batch) here.
-		cmd := exec.Command(osShellCmd, osShellCmdOpt, ovf_cmd)
+		cmd := exec.Command(osShellCmd, osShellCmdOpt, ovfCmd)
 
-		log.Printf("[guestCREATE] ovf_cmd: %s\n", ovf_cmd)
+		log.Printf("[guestCREATE] ovf_cmd: %s\n", ovfCmd)
 
 		cmd.Stdout = &out
 		err = cmd.Run()
@@ -254,12 +255,12 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 
 		if err != nil {
 			log.Printf("Failed, There was an ovftool Error: %s\n%s\n", out.String(), err.Error())
-			return "", fmt.Errorf("There was an ovftool Error: %s\n%s\n", out.String(), err.Error())
+			return "", fmt.Errorf("There was an ovftool Error: %s\n%s", out.String(), err.Error())
 		}
 	}
 
 	// get VMID (by name)
-	vmid, err = guestGetVMID(c, guest_name)
+	vmid, err = GetGuestVMID(c, guestName)
 	if err != nil {
 		return "", err
 	}
@@ -267,17 +268,17 @@ func guestCREATE(c *Config, guest_name string, disk_store string,
 	//
 	//  Grow boot disk to boot_disk_size
 	//
-	boot_disk_vmdkPATH, _ = getBootDiskPath(c, vmid)
+	bootDiskVmdkPath, _ = GetBootDiskPath(c, vmid)
 
-	err = growVirtualDisk(c, boot_disk_vmdkPATH, boot_disk_size)
+	err = GrowVirtualDisk(c, bootDiskVmdkPath, bootDiskSize)
 	if err != nil {
-		return vmid, fmt.Errorf("Failed to grow boot disk.\n")
+		return vmid, fmt.Errorf("Failed to grow boot disk")
 	}
 
 	//
 	//  make updates to vmx file
 	//
-	err = updateVmx_contents(c, vmid, true, memsize, numvcpus, virthwver, guestos, virtual_networks, virtual_disks, notes, guestinfo)
+	err = UpdateVmx(c, vmid, true, memsize, numvcpus, virthwver, guestos, virtualNetworks, virtualDisks, notes, guestinfo)
 	if err != nil {
 		return vmid, err
 	}

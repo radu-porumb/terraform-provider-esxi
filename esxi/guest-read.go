@@ -3,39 +3,40 @@ package esxi
 import (
 	"bufio"
 	"fmt"
-	"github.com/hashicorp/terraform/helper/schema"
 	"log"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceGUESTRead(d *schema.ResourceData, m interface{}) error {
+// ReadGuestDataIntoResource reads the guest VM data into the resource struct
+func ReadGuestDataIntoResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	log.Println("[resourceGUESTRead]")
 
-	guest_startup_timeout := d.Get("guest_startup_timeout").(int)
+	guestStartupTimeout := d.Get("guest_startup_timeout").(int)
 
-	var power string
+	guestName, diskStore, diskSize, bootDiskType, resourcePoolName, memsize, numvcpus, virthwver, guestos, ipAddress, virtualNetworks, virtualDisks, power, notes, guestinfo, err := ReadGuestVMData(c, d.Id(), guestStartupTimeout)
 
-	guest_name, disk_store, disk_size, boot_disk_type, resource_pool_name, memsize, numvcpus, virthwver, guestos, ip_address, virtual_networks, virtual_disks, power, notes, guestinfo, err := guestREAD(c, d.Id(), guest_startup_timeout)
-	if err != nil || guest_name == "" {
+	if err != nil || guestName == "" {
 		d.SetId("")
 		return nil
 	}
 
-	d.Set("guest_name", guest_name)
-	d.Set("disk_store", disk_store)
-	d.Set("disk_size", disk_size)
-	if boot_disk_type != "Unknown" && boot_disk_type != "" {
-		d.Set("boot_disk_type", boot_disk_type)
+	d.Set("guest_name", guestName)
+	d.Set("disk_store", diskStore)
+	d.Set("disk_size", diskSize)
+	if bootDiskType != "Unknown" && bootDiskType != "" {
+		d.Set("boot_disk_type", bootDiskType)
 	}
-	d.Set("resource_pool_name", resource_pool_name)
+	d.Set("resource_pool_name", resourcePoolName)
 	d.Set("memsize", memsize)
 	d.Set("numvcpus", numvcpus)
 	d.Set("virthwver", virthwver)
 	d.Set("guestos", guestos)
-	d.Set("ip_address", ip_address)
+	d.Set("ip_address", ipAddress)
 	d.Set("power", power)
 	d.Set("notes", notes)
 	d.Set("guestinfo", guestinfo)
@@ -52,37 +53,37 @@ func resourceGUESTRead(d *schema.ResourceData, m interface{}) error {
 	}
 
 	// Do network interfaces
-	log.Printf("virtual_networks: %q\n", virtual_networks)
+	log.Printf("virtual_networks: %q\n", virtualNetworks)
 	nics := make([]map[string]interface{}, 0, 1)
 
-	if virtual_networks[0][0] == "" {
+	if virtualNetworks[0][0] == "" {
 		nics = nil
 	}
 
 	for nic := 0; nic < 10; nic++ {
-		if virtual_networks[nic][0] != "" {
+		if virtualNetworks[nic][0] != "" {
 			out := make(map[string]interface{})
-			out["virtual_network"] = virtual_networks[nic][0]
-			out["mac_address"] = virtual_networks[nic][1]
-			out["nic_type"] = virtual_networks[nic][2]
+			out["virtual_network"] = virtualNetworks[nic][0]
+			out["mac_address"] = virtualNetworks[nic][1]
+			out["nic_type"] = virtualNetworks[nic][2]
 			nics = append(nics, out)
 		}
 	}
 	d.Set("network_interfaces", nics)
 
 	// Do virtual disks
-	log.Printf("virtual_disks: %q\n", virtual_disks)
+	log.Printf("virtual_disks: %q\n", virtualDisks)
 	vdisks := make([]map[string]interface{}, 0, 1)
 
-	if virtual_disks[0][0] == "" {
+	if virtualDisks[0][0] == "" {
 		vdisks = nil
 	}
 
 	for vdisk := 0; vdisk < 60; vdisk++ {
-		if virtual_disks[vdisk][0] != "" {
+		if virtualDisks[vdisk][0] != "" {
 			out := make(map[string]interface{})
-			out["virtual_disk_id"] = virtual_disks[vdisk][0]
-			out["slot"] = virtual_disks[vdisk][1]
+			out["virtual_disk_id"] = virtualDisks[vdisk][0]
+			out["slot"] = virtualDisks[vdisk][1]
 			vdisks = append(vdisks, out)
 		}
 	}
@@ -91,25 +92,26 @@ func resourceGUESTRead(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, string, string, string, string, string, string, string, string, string, [10][3]string, [60][2]string, string, string, map[string]interface{}, error) {
-	esxiSSHinfo := SshConnectionStruct{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
+// ReadGuestVMData reads the data of a guest VM from the host
+func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, string, string, string, string, string, string, string, string, string, [10][3]string, [60][2]string, string, string, map[string]interface{}, error) {
+	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[guestREAD]")
 
-	var guest_name, disk_store, virtual_disk_type, resource_pool_name, guestos, ip_address, notes string
-	var dst_vmx_ds, dst_vmx, dst_vmx_file, vmx_contents, power string
-	var disk_size, vdiskindex int
+	var guestName, diskStore, virtualDiskType, resourcePoolName, guestos, ipAddress, notes string
+	var destVmxDiskStore, destVmx, destVmxAbsolutePath, vmxContent, power string
+	var diskSize, vdiskindex int
 	var memsize, numvcpus, virthwver string
-	var virtual_networks [10][3]string
-	var virtual_disks [60][2]string
+	var virtualNetworks [10][3]string
+	var virtualDisks [60][2]string
 	var guestinfo map[string]interface{}
 
 	r, _ := regexp.Compile("")
 
-	remote_cmd := fmt.Sprintf("vim-cmd  vmsvc/get.summary %s", vmid)
-	stdout, err := runRemoteSshCommand(esxiSSHinfo, remote_cmd, "Get Guest summary")
+	remoteCmd := fmt.Sprintf("vim-cmd  vmsvc/get.summary %s", vmid)
+	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "Get Guest summary")
 
 	if strings.Contains(stdout, "Unable to find a VM corresponding") {
-		return "", "", "", "", "", "", "", "", "", "", virtual_networks, virtual_disks, "", "", nil, nil
+		return "", "", "", "", "", "", "", "", "", "", virtualNetworks, virtualDisks, "", "", nil, nil
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(stdout))
@@ -117,54 +119,54 @@ func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, strin
 		switch {
 		case strings.Contains(scanner.Text(), "name = "):
 			r, _ = regexp.Compile(`\".*\"`)
-			guest_name = r.FindString(scanner.Text())
+			guestName = r.FindString(scanner.Text())
 			nr := strings.NewReplacer(`"`, "", `"`, "")
-			guest_name = nr.Replace(guest_name)
+			guestName = nr.Replace(guestName)
 		case strings.Contains(scanner.Text(), "vmPathName = "):
 			r, _ = regexp.Compile(`\[.*\]`)
-			disk_store = r.FindString(scanner.Text())
+			diskStore = r.FindString(scanner.Text())
 			nr := strings.NewReplacer("[", "", "]", "")
-			disk_store = nr.Replace(disk_store)
+			diskStore = nr.Replace(diskStore)
 		}
 	}
 
 	//  Get resource pool that this VM is located
-	remote_cmd = fmt.Sprintf(`grep -A2 'objID>%s</objID' /etc/vmware/hostd/pools.xml | grep -o resourcePool.*resourcePool`, vmid)
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "check if guest is in resource pool")
+	remoteCmd = fmt.Sprintf(`grep -A2 'objID>%s</objID' /etc/vmware/hostd/pools.xml | grep -o resourcePool.*resourcePool`, vmid)
+	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "check if guest is in resource pool")
 	nr := strings.NewReplacer("resourcePool>", "", "</resourcePool", "")
-	vm_resource_pool_id := nr.Replace(stdout)
-	log.Printf("[GuestRead] resource_pool_name|%s| scanner.Text():|%s|\n", vm_resource_pool_id, stdout)
-	resource_pool_name, err = getPoolNAME(c, vm_resource_pool_id)
-	log.Printf("[GuestRead] resource_pool_name|%s| scanner.Text():|%s|\n", vm_resource_pool_id, err)
+	vmResourcePoolID := nr.Replace(stdout)
+	log.Printf("[GuestRead] resource_pool_name|%s| scanner.Text():|%s|\n", vmResourcePoolID, stdout)
+	resourcePoolName, err = getResourcePoolName(c, vmResourcePoolID)
+	log.Printf("[GuestRead] resource_pool_name|%s| scanner.Text():|%s|\n", vmResourcePoolID, err)
 
 	//
 	//  Read vmx file into memory to read settings
 	//
 	//      -Get location of vmx file on esxi host
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get dst_vmx_ds")
-	dst_vmx_ds = stdout
-	dst_vmx_ds = strings.Trim(dst_vmx_ds, "[")
-	dst_vmx_ds = strings.Trim(dst_vmx_ds, "]")
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
+	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx_ds")
+	destVmxDiskStore = stdout
+	destVmxDiskStore = strings.Trim(destVmxDiskStore, "[")
+	destVmxDiskStore = strings.Trim(destVmxDiskStore, "]")
 
-	remote_cmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|awk '{print $NF}'|sed 's/[\"|,]//g'", vmid)
-	stdout, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "get dst_vmx")
-	dst_vmx = stdout
+	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|awk '{print $NF}'|sed 's/[\"|,]//g'", vmid)
+	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx")
+	destVmx = stdout
 
-	dst_vmx_file = "/vmfs/volumes/" + dst_vmx_ds + "/" + dst_vmx
+	destVmxAbsolutePath = "/vmfs/volumes/" + destVmxDiskStore + "/" + destVmx
 
-	log.Printf("[guestREAD] dst_vmx_file: %s\n", dst_vmx_file)
-	log.Printf("[guestREAD] disk_store: %s  dst_vmx_ds:%s\n", disk_store, dst_vmx_file)
+	log.Printf("[guestREAD] dst_vmx_file: %s\n", destVmxAbsolutePath)
+	log.Printf("[guestREAD] disk_store: %s  dst_vmx_ds:%s\n", diskStore, destVmxAbsolutePath)
 
-	remote_cmd = fmt.Sprintf("cat \"%s\"", dst_vmx_file)
-	vmx_contents, err = runRemoteSshCommand(esxiSSHinfo, remote_cmd, "read guest_name.vmx file")
+	remoteCmd = fmt.Sprintf("cat \"%s\"", destVmxAbsolutePath)
+	vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "read guest_name.vmx file")
 
 	// Used to keep track if a network interface is using static or generated macs.
 	var isGeneratedMAC [10]bool
 
 	//  Read vmx_contents line-by-line to get current settings.
 	vdiskindex = 0
-	scanner = bufio.NewScanner(strings.NewReader(vmx_contents))
+	scanner = bufio.NewScanner(strings.NewReader(vmxContent))
 	for scanner.Scan() {
 
 		switch {
@@ -212,9 +214,9 @@ func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, strin
 				} else {
 					if strings.Contains(results[3], "fileName") == true {
 						log.Printf("[guestREAD] %s : %s\n", results[0], results[4])
-						virtual_disks[vdiskindex][0] = results[4]
-						virtual_disks[vdiskindex][1] = fmt.Sprintf("%s:%s", results[1], results[2])
-						vdiskindex += 1
+						virtualDisks[vdiskindex][0] = results[4]
+						virtualDisks[vdiskindex][1] = fmt.Sprintf("%s:%s", results[1], results[2])
+						vdiskindex++
 					}
 				}
 			}
@@ -226,7 +228,7 @@ func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, strin
 
 			switch results[2] {
 			case "networkName":
-				virtual_networks[index][0] = results[3]
+				virtualNetworks[index][0] = results[3]
 				log.Printf("[guestREAD] %s : %s\n", results[0], results[3])
 
 			case "addressType":
@@ -236,18 +238,18 @@ func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, strin
 
 			case "generatedAddress":
 				if isGeneratedMAC[index] == true {
-					virtual_networks[index][1] = results[3]
+					virtualNetworks[index][1] = results[3]
 					log.Printf("[guestREAD] %s : %s\n", results[0], results[3])
 				}
 
 			case "address":
 				if isGeneratedMAC[index] == false {
-					virtual_networks[index][1] = results[3]
+					virtualNetworks[index][1] = results[3]
 					log.Printf("[resourceGUESTRead] %s : %s\n", results[0], results[3])
 				}
 
 			case "virtualDev":
-				virtual_networks[index][2] = results[3]
+				virtualNetworks[index][2] = results[3]
 				log.Printf("[guestREAD] %s : %s\n", results[0], results[3])
 			}
 
@@ -261,36 +263,36 @@ func guestREAD(c *Config, vmid string, guest_startup_timeout int) (string, strin
 		}
 	}
 
-	parsed_vmx := ParseVMX(vmx_contents)
+	parsedVmx := ParseVmxFile(vmxContent)
 
 	//  Get power state
 	log.Println("guestREAD: guestPowerGetState")
-	power = guestPowerGetState(c, vmid)
+	power = GetGuestPowerState(c, vmid)
 
 	//
 	// Get IP address (need vmware tools installed)
 	//
 	if power == "on" {
-		ip_address = guestGetIpAddress(c, vmid, guest_startup_timeout)
-		log.Printf("[guestREAD] guestGetIpAddress: %s\n", ip_address)
+		ipAddress = GetGuestIPAddress(c, vmid, guestStartupTimeout)
+		log.Printf("[guestREAD] guestGetIpAddress: %s\n", ipAddress)
 	} else {
-		ip_address = ""
+		ipAddress = ""
 	}
 
 	// Get boot disk size
-	boot_disk_vmdkPATH, _ := getBootDiskPath(c, vmid)
-	_, _, _, disk_size, virtual_disk_type, err = virtualDiskREAD(c, boot_disk_vmdkPATH)
-	str_disk_size := strconv.Itoa(disk_size)
+	bootDiskPath, _ := GetBootDiskPath(c, vmid)
+	_, _, _, diskSize, virtualDiskType, err = ReadVirtualDiskInfo(c, bootDiskPath)
+	diskSizeString := strconv.Itoa(diskSize)
 
 	// Get guestinfo value
 	guestinfo = make(map[string]interface{})
-	for key, value := range parsed_vmx {
+	for key, value := range parsedVmx {
 		if strings.Contains(key, "guestinfo") {
-			short_key := strings.Replace(key, "guestinfo.", "", -1)
-			guestinfo[short_key] = value
+			shortKey := strings.Replace(key, "guestinfo.", "", -1)
+			guestinfo[shortKey] = value
 		}
 	}
 
 	// return results
-	return guest_name, disk_store, str_disk_size, virtual_disk_type, resource_pool_name, memsize, numvcpus, virthwver, guestos, ip_address, virtual_networks, virtual_disks, power, notes, guestinfo, err
+	return guestName, diskStore, diskSizeString, virtualDiskType, resourcePoolName, memsize, numvcpus, virthwver, guestos, ipAddress, virtualNetworks, virtualDisks, power, notes, guestinfo, err
 }

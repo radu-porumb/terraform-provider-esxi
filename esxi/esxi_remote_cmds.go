@@ -11,8 +11,8 @@ import (
 	"github.com/tmc/scp"
 )
 
-// Connect to esxi host using ssh
-func connectToHost(esxiSSHinfo SshConnectionStruct) (*ssh.Client, *ssh.Session, error) {
+// ConnectToHost connect to ESXi host using SSH
+func ConnectToHost(esxiSSHinfo SSHConnectionSettings) (*ssh.Client, *ssh.Session, error) {
 
 	sshConfig := &ssh.ClientConfig{
 		User: esxiSSHinfo.user,
@@ -20,7 +20,7 @@ func connectToHost(esxiSSHinfo SshConnectionStruct) (*ssh.Client, *ssh.Session, 
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 				// Reply password to all questions
 				answers := make([]string, len(questions))
-				for i, _ := range answers {
+				for i := range answers {
 					answers[i] = esxiSSHinfo.pass
 				}
 
@@ -31,14 +31,14 @@ func connectToHost(esxiSSHinfo SshConnectionStruct) (*ssh.Client, *ssh.Session, 
 
 	sshConfig.HostKeyCallback = ssh.InsecureIgnoreHostKey()
 
-	esxi_hostandport := fmt.Sprintf("%s:%s", esxiSSHinfo.host, esxiSSHinfo.port)
+	esxiHostAndPort := fmt.Sprintf("%s:%s", esxiSSHinfo.host, esxiSSHinfo.port)
 
 	attempt := 10
 	for attempt > 0 {
-		client, err := ssh.Dial("tcp", esxi_hostandport, sshConfig)
+		client, err := ssh.Dial("tcp", esxiHostAndPort, sshConfig)
 		if err != nil {
 			log.Printf("[runRemoteSshCommand] Retry connection: %d\n", attempt)
-			attempt -= 1
+			attempt--
 			time.Sleep(1 * time.Second)
 		} else {
 
@@ -55,28 +55,29 @@ func connectToHost(esxiSSHinfo SshConnectionStruct) (*ssh.Client, *ssh.Session, 
 	return nil, nil, fmt.Errorf("Client Connection Error")
 }
 
-//  Run any remote ssh command on esxi server and return results.
-func runRemoteSshCommand(esxiSSHinfo SshConnectionStruct, remoteSshCommand string, shortCmdDesc string) (string, error) {
+// RunHostCommand runs a command on the remote host
+func RunHostCommand(esxiSSHinfo SSHConnectionSettings, remoteSSHCommand string, shortCmdDesc string) (string, error) {
 	log.Println("[runRemoteSshCommand] :" + shortCmdDesc)
 
-	client, session, err := connectToHost(esxiSSHinfo)
+	client, session, err := ConnectToHost(esxiSSHinfo)
 	if err != nil {
 		log.Println("[runRemoteSshCommand] Failed err: " + err.Error())
 		return "Failed to ssh to esxi host", err
 	}
 
-	stdout_raw, err := session.CombinedOutput(remoteSshCommand)
-	stdout := strings.TrimSpace(string(stdout_raw))
-	log.Printf("[runRemoteSshCommand] cmd:/%s/\n stdout:/%s/\nstderr:/%s/\n", remoteSshCommand, stdout, err)
+	stdoutRaw, err := session.CombinedOutput(remoteSSHCommand)
+	stdout := strings.TrimSpace(string(stdoutRaw))
+	log.Printf("[runRemoteSshCommand] cmd:/%s/\n stdout:/%s/\nstderr:/%s/\n", remoteSSHCommand, stdout, err)
 
 	client.Close()
 	return stdout, err
 }
 
-func copyFileViaScp(esxiSSHinfo SshConnectionStruct, localfileName string, remoteFileName string) error {
+// CopyFileToHost copies a file to the host via SCP
+func CopyFileToHost(esxiSSHinfo SSHConnectionSettings, localfileName string, remoteFileName string) error {
 	log.Println("[copyFileViaScp] :" + localfileName)
 
-	_, session, err := connectToHost(esxiSSHinfo)
+	_, session, err := ConnectToHost(esxiSSHinfo)
 
 	if err != nil {
 		log.Println("[copyFileViaScp] Failed to connect to ESXi host via SSH: " + err.Error())

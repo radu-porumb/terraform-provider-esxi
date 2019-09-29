@@ -4,14 +4,15 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceVIRTUALDISK() *schema.Resource {
+// BuildVirtualDiskResourceSchema builds the virtual disk resource schema
+func BuildVirtualDiskResourceSchema() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceVIRTUALDISKCreate,
-		Read:   resourceVIRTUALDISKRead,
-		Update: resourceVIRTUALDISKUpdate,
-		Delete: resourceVIRTUALDISKDelete,
+		Create: CreateVirtualDiskResource,
+		Read:   ReadVirtualDiskDataIntoResource,
+		Update: UpdateVirtualDisk,
+		Delete: DeleteVirtualDiskResource,
 		Importer: &schema.ResourceImporter{
-			State: resourceVIRTUALDISKImport,
+			State: ImportVirtualDiskDataIntoResource,
 		},
 		Schema: map[string]*schema.Schema{
 			"virtual_disk_disk_store": &schema.Schema{

@@ -2,11 +2,13 @@ package esxi
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform/helper/schema"
 	"log"
+
+	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceGUESTImport(d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+// ImportGuestResource imports a guest resource from ESXi
+func ImportGuestResource(d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
 	c := m.(*Config)
 	log.Println("[resourceGUESTImport]")
 
@@ -17,7 +19,7 @@ func resourceGUESTImport(d *schema.ResourceData, m interface{}) ([]*schema.Resou
 	results[0] = d
 
 	// get VMID (by name)
-	vmid, err = guestValidateVMID(c, d.Id())
+	vmid, err = ValidateGuestVMID(c, d.Id())
 	if err != nil {
 		return results, err
 	}
@@ -25,7 +27,7 @@ func resourceGUESTImport(d *schema.ResourceData, m interface{}) ([]*schema.Resou
 	if vmid == d.Id() {
 		d.SetId(vmid)
 	} else {
-		return results, fmt.Errorf("Failed to validate vmid: %s\n", err)
+		return results, fmt.Errorf("Failed to validate vmid: %s", err)
 	}
 
 	return results, nil
