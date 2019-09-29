@@ -18,7 +18,7 @@ func readGuestDataIntoResource(d *schema.ResourceData, m interface{}) error {
 
 	guestStartupTimeout := d.Get("guest_startup_timeout").(int)
 
-	guestName, diskStore, diskSize, bootDiskType, resourcePoolName, memsize, numvcpus, virthwver, guestos, ipAddress, virtualNetworks, virtualDisks, power, notes, guestinfo, err := ReadGuestVMData(c, d.Id(), guestStartupTimeout)
+	guestName, diskStore, diskSize, bootDiskType, resourcePoolName, memsize, numvcpus, virthwver, guestos, ipAddress, virtualNetworks, virtualDisks, power, notes, guestinfo, err := readGuestVMData(c, d.Id(), guestStartupTimeout)
 
 	if err != nil || guestName == "" {
 		d.SetId("")
@@ -92,8 +92,8 @@ func readGuestDataIntoResource(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-// ReadGuestVMData reads the data of a guest VM from the host
-func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, string, string, string, string, string, string, string, string, string, [10][3]string, [60][2]string, string, string, map[string]interface{}, error) {
+// readGuestVMData reads the data of a guest VM from the host
+func readGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, string, string, string, string, string, string, string, string, string, [10][3]string, [60][2]string, string, string, map[string]interface{}, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[guestREAD]")
 

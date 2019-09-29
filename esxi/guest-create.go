@@ -2,6 +2,7 @@ package esxi
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -10,10 +11,167 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// CreateGuest creates a guest VM on the host
-func CreateGuest(c *Config, guestName string, diskStore string,
+// createGuestResource creates the guest resource
+func createGuestResource(d *schema.ResourceData, m interface{}) error {
+	c := m.(*Config)
+
+	log.Printf("[resourceGUESTCreate]\n")
+
+	var virtualNetworks [10][3]string
+	var virtualDisks [60][2]string
+	var srcPath string
+	var tmpint, i, virtualDiskCount int
+
+	cloneFromVM := d.Get("clone_from_vm").(string)
+	ovfSource := d.Get("ovf_source").(string)
+	diskStore := d.Get("disk_store").(string)
+	resourcePoolName := d.Get("resource_pool_name").(string)
+	guestName := d.Get("guest_name").(string)
+	bootDiskType := d.Get("boot_disk_type").(string)
+	bootDiskSize := d.Get("boot_disk_size").(string)
+	memsize := d.Get("memsize").(string)
+	numvcpus := d.Get("numvcpus").(string)
+	virthwver := d.Get("virthwver").(string)
+	guestos := d.Get("guestos").(string)
+	notes := d.Get("notes").(string)
+	power := d.Get("power").(string)
+	guestShutdownTimeout := d.Get("guest_shutdown_timeout").(int)
+
+	guestinfo, ok := d.Get("guestinfo").(map[string]interface{})
+	if !ok {
+		return errors.New("guestinfo is wrong type")
+	}
+
+	// Validations
+	if resourcePoolName == "ha-root-pool" {
+		resourcePoolName = "/"
+	}
+
+	if cloneFromVM != "" {
+		password := url.QueryEscape(c.esxiPassword)
+		srcPath = fmt.Sprintf("vi://%s:%s@%s/%s", c.esxiUserName, password, c.esxiHostName, cloneFromVM)
+	} else if ovfSource != "" {
+		srcPath = ovfSource
+	} else {
+		srcPath = "none"
+	}
+
+	//  Validate number of virthwver.
+	// todo
+	//switch virthwver {
+	//case 0,4,7,8,9,10,11,12,13,14:
+	//  // virthwver check passes.
+	//default:
+	//  return errors.New("Error: virthwver must be 4,7,8,9,10,11,12,13 or 14")
+	//}
+
+	//  Validate guestos
+	if validateGuestOsType(guestos) == false {
+		return errors.New("Error: invalid guestos.  see https://github.com/josenk/vagrant-vmware-esxi/wiki/VMware-ESXi-6.5-guestOS-types")
+	}
+
+	// Validate boot_disk_type
+	if bootDiskType == "" {
+		bootDiskType = "thin"
+	}
+	if bootDiskType != "thin" && bootDiskType != "zeroedthick" && bootDiskType != "eagerzeroedthick" {
+		return errors.New("Error: boot_disk_type must be thin, zeroedthick or eagerzeroedthick")
+	}
+
+	//  Validate boot_disk_size.
+	if _, err := strconv.Atoi(bootDiskSize); err != nil && bootDiskSize != "" {
+		return errors.New("Error: boot_disk_size must be an integer")
+	}
+	tmpint, _ = strconv.Atoi(bootDiskSize)
+	if (tmpint < 1 || tmpint > 62000) && bootDiskSize != "" {
+		return errors.New("Error: boot_disk_size must be an > 1 and < 62000")
+	}
+
+	//  Validate lan adapters
+	lanAdaptersCount := d.Get("network_interfaces.#").(int)
+	if lanAdaptersCount > 10 {
+		lanAdaptersCount = 10
+	}
+	for i = 0; i < lanAdaptersCount; i++ {
+		prefix := fmt.Sprintf("network_interfaces.%d.", i)
+
+		if attr, ok := d.Get(prefix + "virtual_network").(string); ok && attr != "" {
+			virtualNetworks[i][0] = d.Get(prefix + "virtual_network").(string)
+		}
+
+		if attr, ok := d.Get(prefix + "mac_address").(string); ok && attr != "" {
+			virtualNetworks[i][1] = d.Get(prefix + "mac_address").(string)
+		}
+
+		if attr, ok := d.Get(prefix + "nic_type").(string); ok && attr != "" {
+			virtualNetworks[i][2] = d.Get(prefix + "nic_type").(string)
+			//  Validate nictype
+			if validateNICType(virtualNetworks[i][2]) == false {
+				errMSG := fmt.Sprintf("Error: invalid nic_type. %s\nMust be vlance flexible e1000 e1000e vmxnet vmxnet2 or vmxnet3", virtualNetworks[i][2])
+				return errors.New(errMSG)
+			}
+		}
+	}
+
+	//  Validate virtual_disks
+	virtualDiskCount, ok = d.Get("virtual_disks.#").(int)
+	if !ok {
+		virtualDiskCount = 0
+		virtualDisks[0][0] = ""
+	}
+
+	if virtualDiskCount > 59 {
+		virtualDiskCount = 59
+	}
+	for i = 0; i < virtualDiskCount; i++ {
+		prefix := fmt.Sprintf("virtual_disks.%d.", i)
+
+		if attr, ok := d.Get(prefix + "virtual_disk_id").(string); ok && attr != "" {
+			virtualDisks[i][0] = d.Get(prefix + "virtual_disk_id").(string)
+		}
+
+		if attr, ok := d.Get(prefix + "slot").(string); ok && attr != "" {
+			virtualDisks[i][1] = d.Get(prefix + "slot").(string)
+			validateVirtualDiskSlot(virtualDisks[i][1])
+			result := validateVirtualDiskSlot(virtualDisks[i][1])
+			if result != "ok" {
+				return errors.New(result)
+			}
+		}
+	}
+
+	vmid, err := createGuest(c, guestName, diskStore, srcPath, resourcePoolName, memsize,
+		numvcpus, virthwver, guestos, bootDiskType, bootDiskSize, virtualNetworks,
+		virtualDisks, guestShutdownTimeout, notes, guestinfo)
+	if err != nil {
+		tmpint, _ = strconv.Atoi(vmid)
+		if tmpint > 0 {
+			d.SetId(vmid)
+		}
+		return err
+	}
+
+	//  set vmid
+	d.SetId(vmid)
+
+	if power == "on" {
+		_, err = powerOnGuest(c, vmid)
+		if err != nil {
+			return errors.New("Failed to power on")
+		}
+	}
+	d.Set("power", "on")
+
+	// Refresh
+	return readGuestDataIntoResource(d, m)
+}
+
+// createGuest creates a guest VM on the host
+func createGuest(c *Config, guestName string, diskStore string,
 	srcPath string, resourcePoolName string, memSize string, numVCPUs string, virtHWver string, guestos string,
 	bootDiskType string, bootDiskSize string, virtualNetworks [10][3]string,
 	virtualDisks [60][2]string, guestShutdownTimeout int, notes string,
