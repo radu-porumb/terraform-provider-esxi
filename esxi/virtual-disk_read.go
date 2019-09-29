@@ -6,12 +6,12 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// ReadVirtualDiskDataIntoResource reads virtual disk data from ESXi host into resource
-func ReadVirtualDiskDataIntoResource(d *schema.ResourceData, m interface{}) error {
+// readVirtualDiskDataIntoResource reads virtual disk data from ESXi host into resource
+func readVirtualDiskDataIntoResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	log.Println("[resourceVIRTUALDISKRead]")
 
-	virtualDiskDiskStore, virtualDiskDir, virtualDiskName, virtualDiskSize, virtualDiskType, err := ReadVirtualDiskInfo(c, d.Id())
+	virtualDiskDiskStore, virtualDiskDir, virtualDiskName, virtualDiskSize, virtualDiskType, err := readVirtualDiskInfo(c, d.Id())
 	if err != nil {
 		d.SetId("")
 		return nil

@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// UpdateGuestResource updates the guest resource
-func UpdateGuestResource(d *schema.ResourceData, m interface{}) error {
+// updateGuestResource updates the guest resource
+func updateGuestResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	log.Printf("[resourceGUESTUpdate]\n")
 
@@ -79,9 +79,9 @@ func UpdateGuestResource(d *schema.ResourceData, m interface{}) error {
 	//
 	//   Power off guest if it's powered on.
 	//
-	currentpowerstate := GetGuestPowerState(c, vmid)
+	currentpowerstate := getGuestPowerState(c, vmid)
 	if currentpowerstate == "on" || currentpowerstate == "suspended" {
-		_, err = PowerOffGuest(c, vmid, guestShutdownTimeout)
+		_, err = powerOffGuest(c, vmid, guestShutdownTimeout)
 		if err != nil {
 			return err
 		}
@@ -93,7 +93,7 @@ func UpdateGuestResource(d *schema.ResourceData, m interface{}) error {
 	imemsize, _ := strconv.Atoi(memsize)
 	inumvcpus, _ := strconv.Atoi(numvcpus)
 	ivirthwver, _ := strconv.Atoi(virthwver)
-	err = UpdateVmx(c, vmid, false, imemsize, inumvcpus, ivirthwver, guestos, virtualNetworks, virtualDisks, notes, guestinfo)
+	err = updateVmx(c, vmid, false, imemsize, inumvcpus, ivirthwver, guestos, virtualNetworks, virtualDisks, notes, guestinfo)
 	if err != nil {
 		fmt.Println("Failed to update VMX file.")
 		return errors.New("Failed to update VMX file")
@@ -102,21 +102,21 @@ func UpdateGuestResource(d *schema.ResourceData, m interface{}) error {
 	//
 	//  Grow boot disk to boot_disk_size
 	//
-	bootDiskPath, _ := GetBootDiskPath(c, vmid)
+	bootDiskPath, _ := getBootDiskPath(c, vmid)
 
-	err = GrowVirtualDisk(c, bootDiskPath, bootDiskSize)
+	err = growVirtualDisk(c, bootDiskPath, bootDiskSize)
 	if err != nil {
 		return errors.New("Failed to grow boot disk")
 	}
 
 	//  power on
 	if power == "on" {
-		_, err = PowerOnGuest(c, vmid)
+		_, err = powerOnGuest(c, vmid)
 		if err != nil {
 			fmt.Println("Failed to power on.")
 			return errors.New("Failed to power on")
 		}
 	}
 
-	return ReadGuestDataIntoResource(d, m)
+	return readGuestDataIntoResource(d, m)
 }

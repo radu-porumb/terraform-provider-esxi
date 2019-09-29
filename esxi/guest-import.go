@@ -7,8 +7,8 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// ImportGuestResource imports a guest resource from ESXi
-func ImportGuestResource(d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+// importGuestResource imports a guest resource from ESXi
+func importGuestResource(d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
 	c := m.(*Config)
 	log.Println("[resourceGUESTImport]")
 
@@ -19,7 +19,7 @@ func ImportGuestResource(d *schema.ResourceData, m interface{}) ([]*schema.Resou
 	results[0] = d
 
 	// get VMID (by name)
-	vmid, err = ValidateGuestVMID(c, d.Id())
+	vmid, err = validateGuestVMID(c, d.Id())
 	if err != nil {
 		return results, err
 	}

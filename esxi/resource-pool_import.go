@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceRESOURCEPOOLImport(d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+func importResourcePoolResource(d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
 	c := m.(*Config)
 
 	log.Println("[resourceRESOURCEPOOLImport]")

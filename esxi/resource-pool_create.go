@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceRESOURCEPOOLCreate(d *schema.ResourceData, m interface{}) error {
+func createResourcePoolResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[resourceRESOURCEPOOLCreate]")
@@ -109,7 +109,7 @@ func resourceRESOURCEPOOLCreate(d *schema.ResourceData, m interface{}) error {
 		cpuMinOpt, cpuMinExpandableOpt, cpuMaxOpt, cpuSharesOpt,
 		memMinOpt, memMinExpandableOpt, memMaxOpt, memSharesOpt, parentPoolID, resourcePoolName)
 
-	_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "create resource pool")
+	_, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "create resource pool")
 	poolID, _ = getResourcePoolID(c, resourcePoolName)
 	if err != nil {
 		d.SetId("")

@@ -46,9 +46,9 @@ func Provider() terraform.ResourceProvider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"esxi_guest":         BuildGuestResourceSchema(),
-			"esxi_resource_pool": BuildResourcePoolResourceSchema(),
-			"esxi_virtual_disk":  BuildVirtualDiskResourceSchema(),
+			"esxi_guest":         buildGuestResourceSchema(),
+			"esxi_resource_pool": buildResourcePoolResourceSchema(),
+			"esxi_virtual_disk":  buildVirtualDiskResourceSchema(),
 		},
 		ConfigureFunc: ConfigureProvider,
 	}
@@ -63,7 +63,7 @@ func ConfigureProvider(d *schema.ResourceData) (interface{}, error) {
 		esxiPassword: d.Get("esxi_password").(string),
 	}
 
-	if err := config.ValidateEsxiCredentials(); err != nil {
+	if err := config.validateEsxiCredentials(); err != nil {
 		return nil, err
 	}
 

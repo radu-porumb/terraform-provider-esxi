@@ -11,8 +11,8 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// ReadGuestDataIntoResource reads the guest VM data into the resource struct
-func ReadGuestDataIntoResource(d *schema.ResourceData, m interface{}) error {
+// readGuestDataIntoResource reads the guest VM data into the resource struct
+func readGuestDataIntoResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	log.Println("[resourceGUESTRead]")
 
@@ -108,7 +108,7 @@ func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, s
 	r, _ := regexp.Compile("")
 
 	remoteCmd := fmt.Sprintf("vim-cmd  vmsvc/get.summary %s", vmid)
-	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "Get Guest summary")
+	stdout, err := runCommandOnHost(esxiSSHinfo, remoteCmd, "Get Guest summary")
 
 	if strings.Contains(stdout, "Unable to find a VM corresponding") {
 		return "", "", "", "", "", "", "", "", "", "", virtualNetworks, virtualDisks, "", "", nil, nil
@@ -132,7 +132,7 @@ func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, s
 
 	//  Get resource pool that this VM is located
 	remoteCmd = fmt.Sprintf(`grep -A2 'objID>%s</objID' /etc/vmware/hostd/pools.xml | grep -o resourcePool.*resourcePool`, vmid)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "check if guest is in resource pool")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "check if guest is in resource pool")
 	nr := strings.NewReplacer("resourcePool>", "", "</resourcePool", "")
 	vmResourcePoolID := nr.Replace(stdout)
 	log.Printf("[GuestRead] resource_pool_name|%s| scanner.Text():|%s|\n", vmResourcePoolID, stdout)
@@ -144,13 +144,13 @@ func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, s
 	//
 	//      -Get location of vmx file on esxi host
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx_ds")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "get dst_vmx_ds")
 	destVmxDiskStore = stdout
 	destVmxDiskStore = strings.Trim(destVmxDiskStore, "[")
 	destVmxDiskStore = strings.Trim(destVmxDiskStore, "]")
 
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|awk '{print $NF}'|sed 's/[\"|,]//g'", vmid)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "get dst_vmx")
 	destVmx = stdout
 
 	destVmxAbsolutePath = "/vmfs/volumes/" + destVmxDiskStore + "/" + destVmx
@@ -159,7 +159,7 @@ func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, s
 	log.Printf("[guestREAD] disk_store: %s  dst_vmx_ds:%s\n", diskStore, destVmxAbsolutePath)
 
 	remoteCmd = fmt.Sprintf("cat \"%s\"", destVmxAbsolutePath)
-	vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "read guest_name.vmx file")
+	vmxContent, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "read guest_name.vmx file")
 
 	// Used to keep track if a network interface is using static or generated macs.
 	var isGeneratedMAC [10]bool
@@ -263,25 +263,25 @@ func ReadGuestVMData(c *Config, vmid string, guestStartupTimeout int) (string, s
 		}
 	}
 
-	parsedVmx := ParseVmxFile(vmxContent)
+	parsedVmx := parseVmxFile(vmxContent)
 
 	//  Get power state
 	log.Println("guestREAD: guestPowerGetState")
-	power = GetGuestPowerState(c, vmid)
+	power = getGuestPowerState(c, vmid)
 
 	//
 	// Get IP address (need vmware tools installed)
 	//
 	if power == "on" {
-		ipAddress = GetGuestIPAddress(c, vmid, guestStartupTimeout)
+		ipAddress = getGuestIPAddress(c, vmid, guestStartupTimeout)
 		log.Printf("[guestREAD] guestGetIpAddress: %s\n", ipAddress)
 	} else {
 		ipAddress = ""
 	}
 
 	// Get boot disk size
-	bootDiskPath, _ := GetBootDiskPath(c, vmid)
-	_, _, _, diskSize, virtualDiskType, err = ReadVirtualDiskInfo(c, bootDiskPath)
+	bootDiskPath, _ := getBootDiskPath(c, vmid)
+	_, _, _, diskSize, virtualDiskType, err = readVirtualDiskInfo(c, bootDiskPath)
 	diskSizeString := strconv.Itoa(diskSize)
 
 	// Get guestinfo value

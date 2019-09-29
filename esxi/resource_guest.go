@@ -11,15 +11,15 @@ import (
 	"github.com/hashicorp/terraform/helper/validation"
 )
 
-// BuildGuestResourceSchema builds the guest resource schema
-func BuildGuestResourceSchema() *schema.Resource {
+// buildGuestResourceSchema builds the guest resource schema
+func buildGuestResourceSchema() *schema.Resource {
 	return &schema.Resource{
-		Create: CreateGuestResource,
-		Read:   ReadGuestDataIntoResource,
-		Update: UpdateGuestResource,
-		Delete: DeleteGuestResource,
+		Create: createGuestResource,
+		Read:   readGuestDataIntoResource,
+		Update: updateGuestResource,
+		Delete: deleteGuestResource,
 		Importer: &schema.ResourceImporter{
-			State: ImportGuestResource,
+			State: importGuestResource,
 		},
 		Schema: map[string]*schema.Schema{
 			"count": &schema.Schema{
@@ -209,8 +209,8 @@ func BuildGuestResourceSchema() *schema.Resource {
 	}
 }
 
-// CreateGuestResource creates the guest resource
-func CreateGuestResource(d *schema.ResourceData, m interface{}) error {
+// createGuestResource creates the guest resource
+func createGuestResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 
 	log.Printf("[resourceGUESTCreate]\n")
@@ -353,7 +353,7 @@ func CreateGuestResource(d *schema.ResourceData, m interface{}) error {
 	d.SetId(vmid)
 
 	if power == "on" {
-		_, err = PowerOnGuest(c, vmid)
+		_, err = powerOnGuest(c, vmid)
 		if err != nil {
 			return errors.New("Failed to power on")
 		}
@@ -361,5 +361,5 @@ func CreateGuestResource(d *schema.ResourceData, m interface{}) error {
 	d.Set("power", "on")
 
 	// Refresh
-	return ReadGuestDataIntoResource(d, m)
+	return readGuestDataIntoResource(d, m)
 }

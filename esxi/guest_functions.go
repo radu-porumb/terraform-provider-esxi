@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// GetGuestVMID gets the guest VM's ID by the name
-func GetGuestVMID(c *Config, guestName string) (string, error) {
+// getGuestVMID gets the guest VM's ID by the name
+func getGuestVMID(c *Config, guestName string) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestGetVMID]\n")
 
@@ -21,7 +21,7 @@ func GetGuestVMID(c *Config, guestName string) (string, error) {
 		"grep \"[0-9] * %s .*%s\" | awk '{print $1}' | "+
 		"tail -1", guestName, guestName)
 
-	vmid, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get vmid")
+	vmid, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "get vmid")
 	log.Printf("[guestGetVMID] result: %s\n", vmid)
 	if err != nil {
 		log.Printf("[guestGetVMID] Failed get vmid: %s\n", err)
@@ -31,8 +31,8 @@ func GetGuestVMID(c *Config, guestName string) (string, error) {
 	return vmid, nil
 }
 
-// ValidateGuestVMID validates a guest VM's ID
-func ValidateGuestVMID(c *Config, vmid string) (string, error) {
+// validateGuestVMID validates a guest VM's ID
+func validateGuestVMID(c *Config, vmid string) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestValidateVMID]\n")
 
@@ -42,7 +42,7 @@ func ValidateGuestVMID(c *Config, vmid string) (string, error) {
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/getallvms 2>/dev/null | awk '{print $1}' | "+
 		"grep '^%s$'", vmid)
 
-	vmid, err = RunHostCommand(esxiSSHinfo, remoteCmd, "validate vmid exists")
+	vmid, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "validate vmid exists")
 	log.Printf("[guestValidateVMID] result: %s\n", vmid)
 	if err != nil {
 		log.Printf("[guestValidateVMID] Failed get vmid: %s\n", err)
@@ -52,8 +52,8 @@ func ValidateGuestVMID(c *Config, vmid string) (string, error) {
 	return vmid, nil
 }
 
-// GetBootDiskPath gets the path of the VM's book disk VMDK
-func GetBootDiskPath(c *Config, vmid string) (string, error) {
+// getBootDiskPath gets the path of the VM's book disk VMDK
+func getBootDiskPath(c *Config, vmid string) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getBootDiskPath]\n")
 
@@ -61,7 +61,7 @@ func GetBootDiskPath(c *Config, vmid string) (string, error) {
 	var err error
 
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/device.getdevices %s | grep -A10 'key = 2000'|grep -m 1 fileName", vmid)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get boot disk")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "get boot disk")
 	if err != nil {
 		log.Printf("[getBootDiskPath] Failed get boot disk path: %s\n", stdout)
 		return "Failed get boot disk path:", err
@@ -71,8 +71,8 @@ func GetBootDiskPath(c *Config, vmid string) (string, error) {
 	return r.Replace(stdout), err
 }
 
-// GetDestVmxAbsPath gets the absolute path for the VMX file on the host
-func GetDestVmxAbsPath(c *Config, vmid string) (string, error) {
+// getDestVmxAbsPath gets the absolute path for the VMX file on the host
+func getDestVmxAbsPath(c *Config, vmid string) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getDst_vmx_file]\n")
 
@@ -80,35 +80,35 @@ func GetDestVmxAbsPath(c *Config, vmid string) (string, error) {
 
 	//      -Get location of vmx file on esxi host
 	remoteCmd := fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|grep -oE \"\\[.*\\]\"", vmid)
-	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx_ds")
+	stdout, err := runCommandOnHost(esxiSSHinfo, remoteCmd, "get dst_vmx_ds")
 	destVmxDiskStore = stdout
 	destVmxDiskStore = strings.Trim(destVmxDiskStore, "[")
 	destVmxDiskStore = strings.Trim(destVmxDiskStore, "]")
 
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.config %s | grep vmPathName|awk '{print $NF}'|sed 's/[\"|,]//g'", vmid)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "get dst_vmx")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "get dst_vmx")
 	destVmxPath = stdout
 
 	destVmxAbsPath = "/vmfs/volumes/" + destVmxDiskStore + "/" + destVmxPath
 	return destVmxAbsPath, err
 }
 
-// ReadVmxContent reads the content of a VMX file on the host machine
-func ReadVmxContent(c *Config, vmid string) (string, error) {
+// readVmxContent reads the content of a VMX file on the host machine
+func readVmxContent(c *Config, vmid string) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[getVmx_contents]\n")
 
 	var remoteCmd, vmxContent string
 
-	destVmxFile, err := GetDestVmxAbsPath(c, vmid)
+	destVmxFile, err := getDestVmxAbsPath(c, vmid)
 	remoteCmd = fmt.Sprintf("cat \"%s\"", destVmxFile)
-	vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "read guest_name.vmx file")
+	vmxContent, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "read guest_name.vmx file")
 
 	return vmxContent, err
 }
 
-// UpdateVmx updates the VMX file on the host
-func UpdateVmx(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
+// updateVmx updates the VMX file on the host
+func updateVmx(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
 	virthwver int, guestos string, virtualNetworks [10][3]string, virtualDisks [60][2]string, notes string,
 	guestinfo map[string]interface{}) error {
 
@@ -117,7 +117,7 @@ func UpdateVmx(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
 
 	var regexReplacement, remoteCmd string
 
-	vmxContent, err := ReadVmxContent(c, vmid)
+	vmxContent, err := readVmxContent(c, vmid)
 	if err != nil {
 		log.Printf("[updateVmx_contents] Failed get vmx contents: %s\n", err)
 		return err
@@ -168,12 +168,12 @@ func UpdateVmx(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
 	}
 
 	if len(guestinfo) > 0 {
-		parsedVmx := ParseVmxFile(vmxContent)
+		parsedVmx := parseVmxFile(vmxContent)
 		for k, v := range guestinfo {
 			log.Println("SAVING", k, v)
 			parsedVmx["guestinfo."+k] = v.(string)
 		}
-		vmxContent = BuildVmxString(parsedVmx)
+		vmxContent = buildVmxString(parsedVmx)
 	}
 
 	//
@@ -318,45 +318,45 @@ func UpdateVmx(c *Config, vmid string, iscreate bool, memsize int, numvcpus int,
 	//
 	log.Printf("[updateVmx_contents] New guest_name.vmx: %s\n", vmxContent)
 
-	destVmxFilePath, err := GetDestVmxAbsPath(c, vmid)
-	vmxFileName := GetVmxFileFromPath(destVmxFilePath)
+	destVmxFilePath, err := getDestVmxAbsPath(c, vmid)
+	vmxFileName := getVmxFileFromPath(destVmxFilePath)
 
 	if err != nil {
 		log.Printf("[updateVmx_contents] Failed to get VMX file name from ESXi: %s\n", err)
 		return err
 	}
 
-	err = SaveVmxStringToDisk(vmxFileName, vmxContent)
+	err = saveVmxStringToDisk(vmxFileName, vmxContent)
 
 	if err != nil {
 		return err
 	}
 
-	err = CopyFileToHost(esxiSSHinfo, vmxFileName, destVmxFilePath)
+	err = copyFileToHost(esxiSSHinfo, vmxFileName, destVmxFilePath)
 
 	if err != nil {
 		return err
 	}
 
-	err = DeleteVmx(vmxFileName)
+	err = deleteVmx(vmxFileName)
 
 	if err != nil {
 		return err
 	}
 
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/reload %s", vmid)
-	_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/reload")
+	_, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/reload")
 	return err
 }
 
-// CleanVmxStorage cleans the VMX file storage data
-func CleanVmxStorage(c *Config, vmid string) error {
+// cleanVmxStorage cleans the VMX file storage data
+func cleanVmxStorage(c *Config, vmid string) error {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[cleanStorageFromVmx]\n")
 
 	var remoteCmd string
 
-	vmxContent, err := ReadVmxContent(c, vmid)
+	vmxContent, err := readVmxContent(c, vmid)
 	if err != nil {
 		log.Printf("[updateVmx_contents] Failed get vmx contents: %s\n", err)
 		return err
@@ -377,44 +377,44 @@ func CleanVmxStorage(c *Config, vmid string) error {
 	//
 	vmxContent = strings.Replace(vmxContent, "\"", "\\\"", -1)
 
-	destVmxFile, err := GetDestVmxAbsPath(c, vmid)
+	destVmxFile, err := getDestVmxAbsPath(c, vmid)
 
 	remoteCmd = fmt.Sprintf("echo \"%s\" | grep '[^[:blank:]]' >%s", vmxContent, destVmxFile)
-	vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "write guest_name.vmx file")
+	vmxContent, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "write guest_name.vmx file")
 
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/reload %s", vmid)
-	_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/reload")
+	_, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/reload")
 	return err
 }
 
-// PowerOnGuest powers on the guest VM
-func PowerOnGuest(c *Config, vmid string) (string, error) {
+// powerOnGuest powers on the guest VM
+func powerOnGuest(c *Config, vmid string) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestPowerOn]\n")
 
-	if GetGuestPowerState(c, vmid) == "on" {
+	if getGuestPowerState(c, vmid) == "on" {
 		return "", nil
 	}
 
 	remoteCmd := fmt.Sprintf("vim-cmd vmsvc/power.on %s", vmid)
-	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.on")
+	stdout, err := runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/power.on")
 	time.Sleep(3 * time.Second)
 
-	if GetGuestPowerState(c, vmid) == "on" {
+	if getGuestPowerState(c, vmid) == "on" {
 		return stdout, nil
 	}
 
 	return stdout, err
 }
 
-// PowerOffGuest powers off the guest VM
-func PowerOffGuest(c *Config, vmid string, guestShutdownTimeout int) (string, error) {
+// powerOffGuest powers off the guest VM
+func powerOffGuest(c *Config, vmid string, guestShutdownTimeout int) (string, error) {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestPowerOff]\n")
 
 	var remoteCmd, stdout string
 
-	savedpowerstate := GetGuestPowerState(c, vmid)
+	savedpowerstate := getGuestPowerState(c, vmid)
 	if savedpowerstate == "off" {
 		return "", nil
 
@@ -422,11 +422,11 @@ func PowerOffGuest(c *Config, vmid string, guestShutdownTimeout int) (string, er
 
 		if guestShutdownTimeout != 0 {
 			remoteCmd = fmt.Sprintf("vim-cmd vmsvc/power.shutdown %s", vmid)
-			stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.shutdown")
+			stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/power.shutdown")
 			time.Sleep(3 * time.Second)
 
 			for i := 0; i < (guestShutdownTimeout / 3); i++ {
-				if GetGuestPowerState(c, vmid) == "off" {
+				if getGuestPowerState(c, vmid) == "off" {
 					return stdout, nil
 				}
 				time.Sleep(3 * time.Second)
@@ -434,25 +434,25 @@ func PowerOffGuest(c *Config, vmid string, guestShutdownTimeout int) (string, er
 		}
 
 		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmid)
-		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.off")
+		stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/power.off")
 		time.Sleep(1 * time.Second)
 
 		return stdout, nil
 
 	} else {
 		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/power.off %s", vmid)
-		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.off")
+		stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/power.off")
 		return stdout, nil
 	}
 }
 
-// GetGuestPowerState returns whether the guest VM is powered on or off
-func GetGuestPowerState(c *Config, vmid string) string {
+// getGuestPowerState returns whether the guest VM is powered on or off
+func getGuestPowerState(c *Config, vmid string) string {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestPowerGetState]\n")
 
 	remoteCmd := fmt.Sprintf("vim-cmd vmsvc/power.getstate %s", vmid)
-	stdout, _ := RunHostCommand(esxiSSHinfo, remoteCmd, "vmsvc/power.getstate")
+	stdout, _ := runCommandOnHost(esxiSSHinfo, remoteCmd, "vmsvc/power.getstate")
 	if strings.Contains(stdout, "Unable to find a VM corresponding") {
 		return "Unknown"
 	}
@@ -468,8 +468,8 @@ func GetGuestPowerState(c *Config, vmid string) string {
 	}
 }
 
-// GetGuestIPAddress gets the guest VM's IP address
-func GetGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
+// getGuestIPAddress gets the guest VM's IP address
+func getGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Printf("[guestGetIpAddress]\n")
 
@@ -477,7 +477,7 @@ func GetGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
 	var uptime int
 
 	//  Check if powered off
-	if GetGuestPowerState(c, vmid) != "on" {
+	if getGuestPowerState(c, vmid) != "on" {
 		return ""
 	}
 
@@ -488,7 +488,7 @@ func GetGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
 	for uptime < guestStartupTimeout {
 		//  Primary method to get IP
 		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.guest %s 2>/dev/null |grep -A 5 'deviceConfigId = 4000' |tail -1|grep -oE '((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5]).){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'", vmid)
-		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "get ip_address method 1")
+		stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "get ip_address method 1")
 		ipAddress = stdout
 		if ipAddress != "" {
 			return ipAddress
@@ -498,7 +498,7 @@ func GetGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
 
 		//  Get uptime if above failed.
 		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.summary %s 2>/dev/null | grep 'uptimeSeconds ='|sed 's/^.*= //g'|sed s/,//g", vmid)
-		stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "get uptime")
+		stdout, err := runCommandOnHost(esxiSSHinfo, remoteCmd, "get uptime")
 		if err != nil {
 			return ""
 		}
@@ -509,11 +509,11 @@ func GetGuestIPAddress(c *Config, vmid string, guestStartupTimeout int) string {
 	// Alternate method to get IP
 	//
 	remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.summary %s 2>/dev/null | grep 'uptimeSeconds ='|sed 's/^.*= //g'|sed s/,//g", vmid)
-	stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "get uptime")
+	stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "get uptime")
 	uptime, _ = strconv.Atoi(stdout)
 	if uptime > 120 {
 		remoteCmd = fmt.Sprintf("vim-cmd vmsvc/get.guest %s 2>/dev/null | grep -m 1 '^   ipAddress = ' | grep -oE '((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5]).){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'", vmid)
-		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "get ip_address method 2")
+		stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "get ip_address method 2")
 		ipAddress2 = stdout
 		if ipAddress2 != "" {
 			return ipAddress2

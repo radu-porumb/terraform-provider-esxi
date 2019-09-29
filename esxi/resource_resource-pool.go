@@ -4,15 +4,15 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// BuildResourcePoolResourceSchema builds the resource pool resource schema
-func BuildResourcePoolResourceSchema() *schema.Resource {
+// buildResourcePoolResourceSchema builds the resource pool resource schema
+func buildResourcePoolResourceSchema() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceRESOURCEPOOLCreate,
-		Read:   resourceRESOURCEPOOLRead,
-		Update: UpdateResourcePoolResource,
-		Delete: resourceRESOURCEPOOLDelete,
+		Create: createResourcePoolResource,
+		Read:   readResourcePoolResource,
+		Update: updateResourcePoolResource,
+		Delete: deleteResourcePoolResource,
 		Importer: &schema.ResourceImporter{
-			State: resourceRESOURCEPOOLImport,
+			State: importResourcePoolResource,
 		},
 		Schema: map[string]*schema.Schema{
 			"resource_pool_name": &schema.Schema{

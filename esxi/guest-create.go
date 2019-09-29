@@ -36,7 +36,7 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 	//
 	//  Check if Disk Store already exists
 	//
-	err = ValidateDiskStore(c, diskStore)
+	err = validateDiskStore(c, diskStore)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +45,7 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 	//  Check if guest already exists
 	//
 	// get VMID (by name)
-	vmid, err = GetGuestVMID(c, guestName)
+	vmid, err = getGuestVMID(c, guestName)
 
 	if vmid != "" {
 		// We don't need to create the VM.   It already exists.
@@ -54,9 +54,9 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 		//
 		//   Power off guest if it's powered on.
 		//
-		currentpowerstate := GetGuestPowerState(c, vmid)
+		currentpowerstate := getGuestPowerState(c, vmid)
 		if currentpowerstate == "on" || currentpowerstate == "suspended" {
-			_, err = PowerOffGuest(c, vmid, guestShutdownTimeout)
+			_, err = powerOffGuest(c, vmid, guestShutdownTimeout)
 			if err != nil {
 				return "", fmt.Errorf("Failed to power off existing guest. vmid:%s", vmid)
 			}
@@ -68,14 +68,14 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 		fullPATH := fmt.Sprintf("\"/vmfs/volumes/%s/%s\"", diskStore, guestName)
 		bootDiskVmdkPath = fmt.Sprintf("\"/vmfs/volumes/%s/%s/%s.vmdk\"", diskStore, guestName, guestName)
 		remoteCmd = fmt.Sprintf("ls -d %s", fullPATH)
-		stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "check if guest path already exists.")
+		stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "check if guest path already exists.")
 		if stdout == fullPATH {
 			fmt.Printf("Error: Guest path already exists. fullPATH:%s\n", fullPATH)
 			return "", fmt.Errorf("Guest path already exists. fullPATH:%s", fullPATH)
 		}
 
 		remoteCmd = fmt.Sprintf("mkdir %s", fullPATH)
-		stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "create guest path")
+		stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "create guest path")
 		if err != nil {
 			log.Printf("Failed to create guest path. fullPATH:%s\n", fullPATH)
 			return "", fmt.Errorf("Failed to create guest path. fullPATH:%s", fullPATH)
@@ -152,14 +152,14 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 		destVmxFile := fmt.Sprintf("%s/%s.vmx", fullPATH, guestName)
 
 		remoteCmd = fmt.Sprintf("echo \"%s\" >%s", vmxContent, destVmxFile)
-		vmxContent, err = RunHostCommand(esxiSSHinfo, remoteCmd, "write guest_name.vmx file")
+		vmxContent, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "write guest_name.vmx file")
 
 		//  Create boot disk (vmdk)
 		remoteCmd = fmt.Sprintf("vmkfstools -c %sG -d %s %s/%s.vmdk", bootDiskSize, bootDiskType, fullPATH, guestName)
-		_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "vmkfstools (make boot disk)")
+		_, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "vmkfstools (make boot disk)")
 		if err != nil {
 			remoteCmd = fmt.Sprintf("rm -fr %s", fullPATH)
-			stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "cleanup guest path because of failed events")
+			stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "cleanup guest path because of failed events")
 			log.Printf("Failed to vmkfstools (make boot disk):%s\n", err.Error())
 			return "", fmt.Errorf("Failed to vmkfstools (make boot disk):%s", err.Error())
 		}
@@ -171,11 +171,11 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 			return "", fmt.Errorf("Failed to use Resource Pool ID:%s", poolID)
 		}
 		remoteCmd = fmt.Sprintf("vim-cmd solo/registervm %s %s %s", destVmxFile, guestName, poolID)
-		_, err = RunHostCommand(esxiSSHinfo, remoteCmd, "solo/registervm")
+		_, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "solo/registervm")
 		if err != nil {
 			log.Printf("Failed to register guest:%s\n", err.Error())
 			remoteCmd = fmt.Sprintf("rm -fr %s", fullPATH)
-			stdout, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "cleanup guest path because of failed events")
+			stdout, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "cleanup guest path because of failed events")
 			return "", fmt.Errorf("Failed to register guest:%s", err.Error())
 		}
 
@@ -260,7 +260,7 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 	}
 
 	// get VMID (by name)
-	vmid, err = GetGuestVMID(c, guestName)
+	vmid, err = getGuestVMID(c, guestName)
 	if err != nil {
 		return "", err
 	}
@@ -268,9 +268,9 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 	//
 	//  Grow boot disk to boot_disk_size
 	//
-	bootDiskVmdkPath, _ = GetBootDiskPath(c, vmid)
+	bootDiskVmdkPath, _ = getBootDiskPath(c, vmid)
 
-	err = GrowVirtualDisk(c, bootDiskVmdkPath, bootDiskSize)
+	err = growVirtualDisk(c, bootDiskVmdkPath, bootDiskSize)
 	if err != nil {
 		return vmid, fmt.Errorf("Failed to grow boot disk")
 	}
@@ -278,7 +278,7 @@ func CreateGuest(c *Config, guestName string, diskStore string,
 	//
 	//  make updates to vmx file
 	//
-	err = UpdateVmx(c, vmid, true, memsize, numvcpus, virthwver, guestos, virtualNetworks, virtualDisks, notes, guestinfo)
+	err = updateVmx(c, vmid, true, memsize, numvcpus, virthwver, guestos, virtualNetworks, virtualDisks, notes, guestinfo)
 	if err != nil {
 		return vmid, err
 	}

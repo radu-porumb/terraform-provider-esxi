@@ -8,8 +8,8 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// DeleteVirtualDiskResource deletes the virtual disk resource
-func DeleteVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
+// deleteVirtualDiskResource deletes the virtual disk resource
+func deleteVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	esxiSSHinfo := SSHConnectionSettings{c.esxiHostName, c.esxiHostPort, c.esxiUserName, c.esxiPassword}
 	log.Println("[resourceVIRTUALDISKDelete]")
@@ -23,7 +23,7 @@ func DeleteVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
 
 	//  Destroy virtual disk.
 	remoteCmd = fmt.Sprintf("/bin/vmkfstools -U %s", virtualDiskID)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "destroy virtual disk")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "destroy virtual disk")
 	if err != nil {
 		if strings.Contains(err.Error(), "Process exited with status 255") == true {
 			log.Printf("[resourceVIRTUALDISKDelete] Already deleted:%s", virtualDiskID)
@@ -36,12 +36,12 @@ func DeleteVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
 
 	//  Delete dir if it's empty
 	remoteCmd = fmt.Sprintf("ls -al \"/vmfs/volumes/%s/%s/\" |wc -l", virtualDiskDiskStore, virtualDiskDir)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "Check if Storage dir is empty")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "Check if Storage dir is empty")
 	if stdout == "3" {
 		{
 			//  Delete empty dir.  Ignore stdout and errors.
 			remoteCmd = fmt.Sprintf("rmdir \"/vmfs/volumes/%s/%s\"", virtualDiskDiskStore, virtualDiskDir)
-			_, _ = RunHostCommand(esxiSSHinfo, remoteCmd, "rmdir empty Storage dir")
+			_, _ = runCommandOnHost(esxiSSHinfo, remoteCmd, "rmdir empty Storage dir")
 		}
 	}
 

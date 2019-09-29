@@ -8,7 +8,7 @@ func TestParseVMX(t *testing.T) {
 config.version = "8"
 `
 
-	results := ParseVMX(contents)
+	results := parseVmxFile(contents)
 	if len(results) != 2 {
 		t.Fatalf("not correct number of results: %d", len(results))
 	}
@@ -32,7 +32,7 @@ func TestEncodeVMX(t *testing.T) {
 config.version = "8"
 `
 
-	result := EncodeVMX(contents)
+	result := buildVmxString(contents)
 	if result != expected {
 		t.Errorf("invalid results: %s", result)
 	}

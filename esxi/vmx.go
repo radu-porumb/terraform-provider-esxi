@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// ParseVmxFile parses VMX file to map
-func ParseVmxFile(contents string) map[string]string {
+// parseVmxFile parses VMX file to map
+func parseVmxFile(contents string) map[string]string {
 	results := make(map[string]string)
 
 	lineRe := regexp.MustCompile(`^(.+?)\s*=\s*"(.*?)"\s*$`)
@@ -28,8 +28,8 @@ func ParseVmxFile(contents string) map[string]string {
 	return results
 }
 
-// BuildVmxString builds a valid VMX file from a data map
-func BuildVmxString(contents map[string]string) string {
+// buildVmxString builds a valid VMX file from a data map
+func buildVmxString(contents map[string]string) string {
 	var buf bytes.Buffer
 
 	i := 0
@@ -47,8 +47,8 @@ func BuildVmxString(contents map[string]string) string {
 	return buf.String()
 }
 
-// SaveVmxDataToDisk saves a map of VMX contents to disk
-func SaveVmxDataToDisk(path string, data map[string]string) (err error) {
+// saveVmxDataToDisk saves a map of VMX contents to disk
+func saveVmxDataToDisk(path string, data map[string]string) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return
@@ -56,7 +56,7 @@ func SaveVmxDataToDisk(path string, data map[string]string) (err error) {
 	defer f.Close()
 
 	var buf bytes.Buffer
-	buf.WriteString(BuildVmxString(data))
+	buf.WriteString(buildVmxString(data))
 	if _, err = io.Copy(f, &buf); err != nil {
 		return
 	}
@@ -64,8 +64,8 @@ func SaveVmxDataToDisk(path string, data map[string]string) (err error) {
 	return
 }
 
-// SaveVmxStringToDisk saves VMX contents string to disk
-func SaveVmxStringToDisk(fileName string, data string) (err error) {
+// saveVmxStringToDisk saves VMX contents string to disk
+func saveVmxStringToDisk(fileName string, data string) (err error) {
 
 	file, err := os.Create(fileName)
 	if err != nil {
@@ -81,15 +81,15 @@ func SaveVmxStringToDisk(fileName string, data string) (err error) {
 	return file.Sync()
 }
 
-// DeleteVmx deletes VMX file from local disk
-func DeleteVmx(fileName string) (err error) {
+// deleteVmx deletes VMX file from local disk
+func deleteVmx(fileName string) (err error) {
 	err = os.Remove(fileName)
 
 	return
 }
 
-// GetVmxFileFromPath gets the VMX file name from a path string
-func GetVmxFileFromPath(path string) string {
+// getVmxFileFromPath gets the VMX file name from a path string
+func getVmxFileFromPath(path string) string {
 	if !strings.Contains(path, "/") {
 		return path
 	}

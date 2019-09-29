@@ -24,7 +24,7 @@ func getResourcePoolID(c *Config, resourcePoolName string) (string, error) {
 
 	r := strings.NewReplacer("objID>", "", "</objID", "")
 	remoteCmd := fmt.Sprintf("grep -A1 '<name>%s</name>' /etc/vmware/hostd/pools.xml | grep -o objID.*objID | tail -1", resourcePoolName)
-	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "get existing resource pool id")
+	stdout, err := runCommandOnHost(esxiSSHinfo, remoteCmd, "get existing resource pool id")
 	if err == nil {
 		stdout = r.Replace(stdout)
 		return stdout, err
@@ -50,7 +50,7 @@ func getResourcePoolName(c *Config, resourcePoolID string) (string, error) {
 
 	// Get full Resource Pool Path
 	remoteCmd := fmt.Sprintf("grep -A1 '<objID>%s</objID>' /etc/vmware/hostd/pools.xml | grep '<path>'", resourcePoolID)
-	stdout, err := RunHostCommand(esxiSSHinfo, remoteCmd, "get resource pool path")
+	stdout, err := runCommandOnHost(esxiSSHinfo, remoteCmd, "get resource pool path")
 	if err != nil {
 		log.Printf("[getPoolNAME] Failed get resource pool PATH: %s\n", stdout)
 		return "", err
@@ -66,7 +66,7 @@ func getResourcePoolName(c *Config, resourcePoolID string) (string, error) {
 
 			r := strings.NewReplacer("name>", "", "</name", "")
 			remoteCmd := fmt.Sprintf("grep -B1 '<objID>%s</objID>' /etc/vmware/hostd/pools.xml | grep -o name.*name", result[i])
-			stdout, _ := RunHostCommand(esxiSSHinfo, remoteCmd, "get resource pool name")
+			stdout, _ := runCommandOnHost(esxiSSHinfo, remoteCmd, "get resource pool name")
 			resourcePoolName = r.Replace(stdout)
 
 			if resourcePoolName != "" {
@@ -92,7 +92,7 @@ func readResourcePoolData(c *Config, poolID string) (string, int, string, int, s
 	var err error
 
 	remoteCmd = fmt.Sprintf("vim-cmd hostsvc/rsrc/pool_config_get %s", poolID)
-	stdout, err = RunHostCommand(esxiSSHinfo, remoteCmd, "resource pool_config_get")
+	stdout, err = runCommandOnHost(esxiSSHinfo, remoteCmd, "resource pool_config_get")
 
 	if strings.Contains(stdout, "deleted") == true {
 		log.Printf("[resourcePoolRead] Already deleted: %s\n", err)

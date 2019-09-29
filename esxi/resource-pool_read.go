@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-func resourceRESOURCEPOOLRead(d *schema.ResourceData, m interface{}) error {
+func readResourcePoolResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 
 	log.Println("[resourceRESOURCEPOOLRead]")

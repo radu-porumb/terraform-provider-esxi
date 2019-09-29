@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
-// CreateVirtualDiskResource creates a virtual disk resource
-func CreateVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
+// createVirtualDiskResource creates a virtual disk resource
+func createVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
 	c := m.(*Config)
 	log.Println("[resourceVIRTUALDISKCreate]")
 
@@ -39,7 +39,7 @@ func CreateVirtualDiskResource(d *schema.ResourceData, m interface{}) error {
 	// todo,  check invalid chars (quotes, slash, period, comma)
 	// todo,  must end with .vmdk
 
-	virtDiskID, err := CreateVirtualDisk(c, virtualDiskDiskStore, virtualDiskDir,
+	virtDiskID, err := createVirtualDisk(c, virtualDiskDiskStore, virtualDiskDir,
 		virtualDiskName, virtualDiskSize, virtualDiskType)
 	if err == nil {
 		d.SetId(virtDiskID)

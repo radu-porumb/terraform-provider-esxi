@@ -11,8 +11,8 @@ import (
 	"github.com/tmc/scp"
 )
 
-// ConnectToHost connect to ESXi host using SSH
-func ConnectToHost(esxiSSHinfo SSHConnectionSettings) (*ssh.Client, *ssh.Session, error) {
+// connectToHost connect to ESXi host using SSH
+func connectToHost(esxiSSHinfo SSHConnectionSettings) (*ssh.Client, *ssh.Session, error) {
 
 	sshConfig := &ssh.ClientConfig{
 		User: esxiSSHinfo.user,
@@ -55,11 +55,11 @@ func ConnectToHost(esxiSSHinfo SSHConnectionSettings) (*ssh.Client, *ssh.Session
 	return nil, nil, fmt.Errorf("Client Connection Error")
 }
 
-// RunHostCommand runs a command on the remote host
-func RunHostCommand(esxiSSHinfo SSHConnectionSettings, remoteSSHCommand string, shortCmdDesc string) (string, error) {
+// runCommandOnHost runs a command on the remote host
+func runCommandOnHost(esxiSSHinfo SSHConnectionSettings, remoteSSHCommand string, shortCmdDesc string) (string, error) {
 	log.Println("[runRemoteSshCommand] :" + shortCmdDesc)
 
-	client, session, err := ConnectToHost(esxiSSHinfo)
+	client, session, err := connectToHost(esxiSSHinfo)
 	if err != nil {
 		log.Println("[runRemoteSshCommand] Failed err: " + err.Error())
 		return "Failed to ssh to esxi host", err
@@ -73,11 +73,11 @@ func RunHostCommand(esxiSSHinfo SSHConnectionSettings, remoteSSHCommand string, 
 	return stdout, err
 }
 
-// CopyFileToHost copies a file to the host via SCP
-func CopyFileToHost(esxiSSHinfo SSHConnectionSettings, localfileName string, remoteFileName string) error {
+// copyFileToHost copies a file to the host via SCP
+func copyFileToHost(esxiSSHinfo SSHConnectionSettings, localfileName string, remoteFileName string) error {
 	log.Println("[copyFileViaScp] :" + localfileName)
 
-	_, session, err := ConnectToHost(esxiSSHinfo)
+	_, session, err := connectToHost(esxiSSHinfo)
 
 	if err != nil {
 		log.Println("[copyFileViaScp] Failed to connect to ESXi host via SSH: " + err.Error())
