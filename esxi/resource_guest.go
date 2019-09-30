@@ -16,13 +16,6 @@ func buildGuestResourceSchema() *schema.Resource {
 			State: importGuestResource,
 		},
 		Schema: map[string]*schema.Schema{
-			"count": &schema.Schema{
-				Type:        schema.TypeInt,
-				Optional:    true,
-				ForceNew:    true,
-				Default:     1,
-				Description: "Number of VM instances to create.",
-			},
 			"clone_from_vm": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    true,
